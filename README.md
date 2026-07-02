@@ -16,9 +16,8 @@ punto del flujo.
 - [x] Amazon S3 — scaffold completo (formulario de credenciales, listar,
       crear carpeta, subir con integridad), sin probar contra un bucket
       real (ver sección [Amazon S3](#conexión-con-amazon-s3-sin-oauth))
-- [x] FTP — scaffold completo (formulario de credenciales, listar, crear
-      carpeta, subir con integridad), sin poder probar ninguna conexión
-      real (ver sección [FTP](#conexión-con-ftp-sin-oauth))
+- [x] Conexión + navegador de archivos + subida (FTP) — probado y
+      funcionando contra un servidor real
 - [x] Configuración lista para desplegar en Render.com (ver [DEPLOY.md](./DEPLOY.md))
 
 ## Arquitectura
@@ -454,20 +453,17 @@ Mismo patrón que S3 (formulario de credenciales, sin OAuth), con
 5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador
    de archivos apuntando a la raíz de tu cuenta FTP
 
-**Nota sobre las pruebas de este paso**: este es el caso más limitado de
-los cuatro. Este sandbox **no tiene salida de red para FTP en absoluto**
-(ni siquiera hacia un servidor de test público como `test.rebex.net` — el
-intento de conexión se queda colgado sin ninguna respuesta, a diferencia
-de Dropbox/Google que al menos devuelven un 403 explícito, o S3 que
-funciona completo). No pude probar ni un solo intento de conexión real.
-Sí probé:
+**Nota sobre las pruebas de este paso**: este sandbox **no tiene salida de
+red para FTP en absoluto** (ni siquiera hacia un servidor de test público
+como `test.rebex.net` — el intento de conexión se queda colgado sin
+ninguna respuesta, a diferencia de Dropbox/Google que al menos devuelven
+un 403 explícito, o S3 que funciona completo), así que yo no pude probar
+ni un solo intento de conexión real. Sí probé:
 - Validaciones de campos faltantes y puerto inválido (400).
 - El mecanismo de timeout: con un host real pero inalcanzable desde acá
   (`test.rebex.net`), la conexión falla prolijamente a los 15 segundos con
   el mensaje "Tiempo de espera agotado..." en vez de colgar el pedido para
-  siempre — esto confirma que el timeout configurado en `basic-ftp`
-  funciona y que el mapeo de ese error especifico a un mensaje legible
-  anda bien, aunque no haya podido probar una conexión exitosa.
+  siempre.
 - El despacho genérico: con una conexión FTP guardada (credenciales
   inventadas), `GET /api/files` llega hasta `services/ftp.js` y falla con
   el mismo timeout prolijo — confirma que el wiring en `routes/files.js`
@@ -480,16 +476,14 @@ Sí probé:
   exclusión mutua con el formulario de S3, envío mostrando el error de
   timeout y dejando el formulario abierto para corregir.
 
-Esta es la parte que más necesito que pruebes vos cuando tengas acceso FTP
-a algún hosting (o incluso a un servidor FTP casero para probar) — es la
-única de las cuatro integraciones donde no pude confirmar ni un solo
-intento de conexión real contra un servidor de verdad.
+**Confirmado por el usuario contra un servidor FTP real**: conexión,
+listado de la carpeta raíz, y el flujo funcionando de punta a punta.
 
 ## Estado del proyecto
 
-Con esto quedan cuatro proveedores andando (Dropbox y Google Drive
-probados de punta a punta por vos; S3 y FTP con el scaffold completo listo
-para cuando tengan credenciales/bucket/servidor reales para probar). El
+Con esto quedan cuatro proveedores andando: Dropbox, Google Drive y FTP
+probados de punta a punta por vos contra cuentas/servidores reales; S3 con
+el scaffold completo listo para cuando tengas un bucket para probar. El
 flujo end-to-end completo — registro, conectar almacenamiento,
 navegar/crear carpetas, subir imágenes sin compresión con chequeo de
 integridad — funciona igual sin importar cuál de los cuatro esté activo,
