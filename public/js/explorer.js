@@ -6,6 +6,7 @@ const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', '
 const ROOT_LABELS = {
   dropbox: 'Mi Dropbox',
   google_drive: 'Mi Drive',
+  s3: 'Bucket S3',
 };
 
 // "ref" es opaco por proveedor (path para Dropbox, id de archivo para

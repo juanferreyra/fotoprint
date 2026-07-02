@@ -38,6 +38,28 @@
       display: flex;
       gap: 8px;
     }
+    .s3-form {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 20px 24px;
+      margin-top: 4px;
+      max-width: 420px;
+    }
+    .s3-form h3 {
+      margin: 0 0 4px;
+      font-size: 1.05rem;
+    }
+    .s3-form .subtitle {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin: 0 0 16px;
+    }
+    .s3-form-actions {
+      display: flex;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
@@ -65,6 +87,28 @@
     <div id="success-box" class="success-box" style="display:none"></div>
 
     <div class="provider-list" id="provider-list"></div>
+
+    <form class="s3-form" id="s3-form" style="display:none">
+      <h3>Conectar Amazon S3</h3>
+      <p class="subtitle">Necesitas un usuario IAM con permisos sobre un bucket especifico (ver README).</p>
+
+      <label for="s3-access-key">Access Key ID</label>
+      <input type="text" id="s3-access-key" autocomplete="off" required />
+
+      <label for="s3-secret-key">Secret Access Key</label>
+      <input type="password" id="s3-secret-key" autocomplete="off" required />
+
+      <label for="s3-bucket">Bucket</label>
+      <input type="text" id="s3-bucket" placeholder="mi-bucket-fotos" required />
+
+      <label for="s3-region">Region</label>
+      <input type="text" id="s3-region" placeholder="us-east-1" required />
+
+      <div class="s3-form-actions">
+        <button type="submit" class="btn-primary-sm" id="s3-submit-btn">Conectar</button>
+        <button type="button" class="btn-secondary" id="s3-cancel">Cancelar</button>
+      </div>
+    </form>
   </main>
 
   <script type="module">
@@ -81,6 +125,8 @@
     const errorBox = document.getElementById('error-box');
     const successBox = document.getElementById('success-box');
     const providerBadge = document.getElementById('provider-badge');
+    const s3Form = document.getElementById('s3-form');
+    const s3SubmitBtn = document.getElementById('s3-submit-btn');
 
     function updateProviderBadge(connections) {
       const active = connections.find((c) => c.is_active);
@@ -136,11 +182,18 @@
             link.className = 'btn-primary-sm';
             link.textContent = 'Conectar';
             actions.appendChild(link);
-          } else {
-            const soon = document.createElement('span');
-            soon.className = 'status';
-            soon.textContent = 'Proximamente';
-            actions.appendChild(soon);
+          } else if (provider === 's3') {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn-primary-sm';
+            btn.textContent = 'Conectar';
+            btn.addEventListener('click', () => {
+              s3Form.style.display = s3Form.style.display === 'none' ? 'block' : 'none';
+              if (s3Form.style.display === 'block') {
+                s3Form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }
+            });
+            actions.appendChild(btn);
           }
         } else {
           if (!conn.is_active) {
@@ -184,6 +237,38 @@
         showError(err.message);
       }
     }
+
+    document.getElementById('s3-cancel').addEventListener('click', () => {
+      s3Form.style.display = 'none';
+    });
+
+    s3Form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      errorBox.classList.remove('visible');
+      s3SubmitBtn.disabled = true;
+      s3SubmitBtn.textContent = 'Probando credenciales...';
+
+      try {
+        const body = {
+          accessKeyId: document.getElementById('s3-access-key').value,
+          secretAccessKey: document.getElementById('s3-secret-key').value,
+          bucket: document.getElementById('s3-bucket').value,
+          region: document.getElementById('s3-region').value,
+        };
+        const { connections } = await apiFetch('/api/connections/s3', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+        s3Form.reset();
+        s3Form.style.display = 'none';
+        render(connections);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        s3SubmitBtn.disabled = false;
+        s3SubmitBtn.textContent = 'Conectar';
+      }
+    });
 
     async function init() {
       try {

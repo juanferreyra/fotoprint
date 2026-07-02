@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { getActiveConnection } from '../services/connections.js';
 import * as dropboxService from '../services/dropbox.js';
 import * as googleDriveService from '../services/googleDrive.js';
+import * as s3Service from '../services/s3.js';
 
 export const filesRouter = Router();
 
@@ -19,6 +20,7 @@ filesRouter.use(requireAuth);
 const PROVIDER_SERVICES = {
   dropbox: dropboxService,
   google_drive: googleDriveService,
+  s3: s3Service,
 };
 
 // Limite de subida en un solo request (coincide con el limite de Dropbox

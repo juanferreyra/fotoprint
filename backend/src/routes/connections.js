@@ -6,9 +6,11 @@ import {
   activateConnection,
   deleteConnection,
   saveConnection,
+  getConnection,
 } from '../services/connections.js';
 import * as dropbox from '../services/dropbox.js';
 import * as googleDrive from '../services/googleDrive.js';
+import * as s3 from '../services/s3.js';
 
 export const connectionsRouter = Router();
 
@@ -73,10 +75,16 @@ connectionsRouter.get('/dropbox/callback', async (req, res, next) => {
     const tokenResult = await dropbox.exchangeCodeForToken(code);
     const account = await dropbox.getAccountInfo(tokenResult.access_token);
 
+    // Si ya habia una conexion de Dropbox, esto la actualiza en el mismo
+    // registro (mismo id). Invalidamos el access_token cacheado para esa
+    // conexion, sino seguiria usando el token de la cuenta anterior hasta
+    // que venza.
+    const existing = getConnection(req.session.userId, 'dropbox');
     saveConnection(req.session.userId, 'dropbox', account.email || account.name?.display_name || 'Dropbox', {
       refresh_token: tokenResult.refresh_token,
       account_id: tokenResult.account_id,
     });
+    if (existing) dropbox.invalidateCache(existing.id);
 
     res.redirect('/connect.html?connected=dropbox');
   } catch (err) {
@@ -119,13 +127,48 @@ connectionsRouter.get('/google_drive/callback', async (req, res) => {
 
     const account = await googleDrive.getAccountInfo(tokens);
 
+    const existing = getConnection(req.session.userId, 'google_drive');
     saveConnection(req.session.userId, 'google_drive', account.email || 'Google Drive', {
       refresh_token: tokens.refresh_token,
     });
+    if (existing) googleDrive.invalidateCache(existing.id);
 
     res.redirect('/connect.html?connected=google_drive');
   } catch (err) {
     console.error('Error en callback de Google Drive OAuth:', err);
     res.redirect(`/connect.html?error=${encodeURIComponent('No se pudo completar la conexion con Google Drive.')}`);
   }
+});
+
+// --- Amazon S3 (formulario de credenciales, sin OAuth) ---
+
+connectionsRouter.post('/s3', async (req, res) => {
+  const { accessKeyId, secretAccessKey, bucket, region } = req.body || {};
+  const fields = { accessKeyId, secretAccessKey, bucket, region };
+  const missing = Object.entries(fields).filter(([, value]) => typeof value !== 'string' || !value.trim());
+
+  if (missing.length > 0) {
+    return res.status(400).json({ error: 'Access key, secret key, bucket y region son requeridos.' });
+  }
+
+  const credentials = {
+    accessKeyId: accessKeyId.trim(),
+    secretAccessKey: secretAccessKey.trim(),
+    bucket: bucket.trim(),
+    region: region.trim(),
+  };
+
+  try {
+    // Probamos las credenciales contra el bucket real antes de guardar,
+    // para no dejar guardada una conexion rota por un typo.
+    await s3.testCredentials(credentials);
+  } catch (err) {
+    return res.status(err.httpStatus || 502).json({ error: err.message });
+  }
+
+  const existing = getConnection(req.session.userId, 's3');
+  saveConnection(req.session.userId, 's3', `${credentials.bucket} (${credentials.region})`, credentials);
+  if (existing) s3.invalidateCache(existing.id);
+
+  res.status(201).json({ connections: listConnections(req.session.userId) });
 });

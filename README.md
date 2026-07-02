@@ -12,7 +12,9 @@ y sin recomprimir ni recodificar las imágenes en ningún punto del flujo.
 - [x] Navegador de archivos (Dropbox)
 - [x] Subida de imágenes sin compresión + chequeo de integridad (Dropbox)
 - [x] Conexión OAuth + navegador de archivos + subida (Google Drive)
-- [ ] Amazon S3
+- [x] Amazon S3 — scaffold completo (formulario de credenciales, listar,
+      crear carpeta, subir con integridad), sin probar contra un bucket
+      real (ver sección [Amazon S3](#conexión-con-amazon-s3-sin-oauth))
 
 ## Arquitectura
 
@@ -36,6 +38,7 @@ fotoprint/
       services/dropbox.js   # DropboxAuth, cache de access_token, listFolder/createFolder/uploadFile,
                              # mapeo de errores del SDK a mensajes legibles
       services/googleDrive.js # OAuth2 (googleapis), Drive API v3, misma interfaz que dropbox.js
+      services/s3.js         # @aws-sdk/client-s3, misma interfaz, sin OAuth (credenciales de larga duracion)
     data/                    # SQLite en disco (gitignored)
     .env.example
   public/                    # frontend estático, vanilla JS (sin build step)
@@ -76,7 +79,10 @@ fotoprint/
   Dropbox el `ref` es literalmente el path (`/Fotos/Playa`), para Drive es el
   `id` del archivo/carpeta (Drive no tiene paths reales — un mismo nombre de
   carpeta puede repetirse, así que solo el `id` identifica un recurso sin
-  ambigüedad). La raíz siempre es `ref = ''`.
+  ambigüedad), y para S3 es la key/prefix del objeto (S3 tampoco tiene
+  carpetas reales — se simulan con objetos vacíos cuya key termina en `/`,
+  y se listan con `Delimiter: '/'` para separar "carpetas" de "archivos").
+  La raíz siempre es `ref = ''`.
   El frontend (`js/explorer.js`) tampoco parsea el `ref` como un path: arma
   el breadcrumb como una pila `{ref, name}` en el cliente a medida que el
   usuario entra/sale de carpetas, lo que funciona igual sin importar si el
@@ -265,14 +271,125 @@ manejo de `state` inválido/cancelación de usuario. Con Playwright probé que
 el botón "Conectar" ya aparece habilitado en `/connect.html` para Google
 Drive (dejó de mostrar "Próximamente").
 
-## Próximo paso
+## Conexión con Amazon S3 (sin OAuth)
 
-Sumar Amazon S3, que a diferencia de Dropbox/Drive no usa OAuth sino un
-formulario de credenciales (access key, secret key, bucket, región) — va a
-necesitar una pantalla distinta en `connect.html` para cargar esos datos en
-vez de un botón "Conectar" que redirige. La lógica de `routes/files.js` no
-debería necesitar cambios: solo hace falta un `services/s3.js` que
-implemente la misma interfaz (`listFolder`, `createFolder`, `uploadFile`,
-`deleteFile`) usando `@aws-sdk/client-s3`, sabiendo que S3 tampoco tiene
-carpetas reales — se simulan con objetos "carpeta" que terminan en `/` o
-inferencia por prefijo de key.
+A diferencia de Dropbox/Drive, S3 no usa OAuth: el usuario carga
+directamente un **Access Key ID**, **Secret Access Key**, **bucket** y
+**región** de un usuario IAM. `services/s3.js` implementa la misma interfaz
+que los otros dos (`listFolder`, `createFolder`, `uploadFile`, `deleteFile`)
+usando `@aws-sdk/client-s3`.
+
+- `POST /api/connections/s3` (`{ accessKeyId, secretAccessKey, bucket, region }`):
+  antes de guardar nada, prueba las credenciales con un `HeadBucketCommand`
+  real contra AWS — si fallan (typo, bucket inexistente, sin permisos), se
+  devuelve el error sin guardar la conexión. Si funciona, se cifran y
+  guardan igual que los tokens de Dropbox/Drive, y la conexión queda activa.
+- Como las credenciales de IAM no vencen (a diferencia de un `access_token`
+  OAuth), no hace falta refrescar nada — `services/s3.js` solo cachea el
+  `S3Client` en memoria por conexión para no reconstruirlo en cada request.
+- **"Carpetas" en S3**: S3 es un almacenamiento plano de objetos (key →
+  contenido), no tiene jerarquía real. Se simula con la convención clásica:
+  una carpeta es un objeto vacío cuya key termina en `/`
+  (ej. `Vacaciones/`), y `listFolder` usa `ListObjectsV2` con
+  `Delimiter: '/'` para separar "subcarpetas" (`CommonPrefixes`) de
+  "archivos" (`Contents`) dentro de un prefijo. El chequeo de integridad de
+  la subida usa un `HeadObjectCommand` después del `PutObjectCommand`
+  porque `PutObject` no devuelve el tamaño guardado en su respuesta.
+- Frontend: en `/connect.html`, el botón **Conectar** de Amazon S3 despliega
+  un formulario inline (en vez de redirigir, como Dropbox/Drive) con los
+  4 campos. Errores de credenciales se muestran en el mismo `error-box` de
+  la página; el formulario queda abierto para corregir si falla.
+- **Fix de paso**: al reconectar un proveedor que ya estaba conectado
+  (Dropbox, Drive o S3) con credenciales nuevas, la fila de
+  `cloud_connections` se actualiza (mismo `id`) en vez de crear una nueva.
+  Sin invalidar el cliente/token cacheado para ese `id`, el servidor podía
+  seguir usando las credenciales viejas hasta que el proceso se reiniciara
+  (para S3, que no vence nunca, indefinidamente). Ahora las tres rutas de
+  conexión invalidan el caché del proveedor correspondiente al guardar
+  credenciales nuevas sobre una conexión existente.
+
+### Cómo crear el usuario IAM (necesito estas credenciales, o las cargás vos directo en tu `.env`)
+
+Ya que no tenés todavía un bucket real, dejo la guía para cuando lo tengas:
+
+1. Andá a https://console.aws.amazon.com/s3/ y creá un bucket (o usá uno
+   existente). No hace falta configurar CORS ni hacerlo público: las
+   imágenes nunca viajan directo entre el navegador y S3, siempre pasan por
+   este backend, que es el único que le habla a S3.
+2. Andá a **IAM → Users → Create user**. No le des acceso a la consola,
+   solo **Access key - Programmatic access**.
+3. **Permissions → Attach policies directly → Create policy** (JSON), con
+   permisos acotados solo a ese bucket:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": ["s3:ListBucket"],
+         "Resource": "arn:aws:s3:::TU-BUCKET"
+       },
+       {
+         "Effect": "Allow",
+         "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+         "Resource": "arn:aws:s3:::TU-BUCKET/*"
+       }
+     ]
+   }
+   ```
+   Evitá usar las access keys de tu usuario root de AWS o un usuario con
+   permisos amplios — con esta policy, aunque se filtren las keys, el daño
+   queda acotado a ese bucket.
+4. Generá un **Access key** para ese usuario (IAM → Users → tu usuario →
+   **Security credentials → Create access key**, caso de uso "Application
+   running outside AWS"). Copiá el **Access Key ID** y el **Secret Access
+   Key** — el secret solo se muestra una vez.
+5. Cargalos en el formulario de `/connect.html`, o directo en
+   `backend/.env` si preferís no escribirlos en el navegador (no hay
+   variables de entorno para S3 porque las credenciales son por usuario,
+   no de la app — se cargan siempre por el formulario).
+
+### Cómo probarlo
+
+1. `cd backend && npm run dev`
+2. Logueado, andá a `http://localhost:3000/connect.html`
+3. Click en **Conectar** (Amazon S3), completá el formulario con el Access
+   Key/Secret/bucket/región del paso anterior, click en **Conectar**
+4. Si las credenciales son válidas vas a ver la card en estado "Activo"
+   inmediatamente (no hay redirect de por medio)
+5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador de
+   archivos apuntando al bucket
+
+**Nota sobre las pruebas de este paso**: a diferencia de Dropbox y Google
+Drive, este sandbox **sí tiene salida de red hacia AWS S3** (lo confirmé
+con un `curl` directo a `s3.us-east-1.amazonaws.com`, que respondió
+normalmente, mientras que Dropbox/Google siguen bloqueados). Aproveché eso
+para probar más de lo que pude con los otros dos proveedores:
+- Validación de campos faltantes en el formulario (400).
+- Una llamada real a AWS con credenciales inventadas: `HeadBucketCommand`
+  devolvió un 403 real de AWS, traducido a "no tenés permiso... revisa la
+  política IAM".
+- Con una conexión S3 guardada (credenciales inventadas), `GET /api/files`
+  y `POST /api/files/folders` reales dispararon `ListObjectsV2`/`PutObject`
+  contra AWS de verdad, que devolvió `InvalidAccessKeyId`, traducido
+  correctamente a 401 "El Access Key o el Secret Key de S3 son invalidos" —
+  confirma que el despacho genérico en `routes/files.js` y el manejo de
+  errores de `services/s3.js` funcionan contra la API real, no solo en teoría.
+- El formulario completo en el navegador con Playwright: abrir/cancelar,
+  envío con credenciales falsas mostrando el error y dejando el formulario
+  abierto para corregir, y la card pasando a estado "Activo" con el nombre
+  del bucket.
+
+Lo único que **no** pude probar es una operación exitosa (listar un bucket
+real, crear una carpeta, subir una imagen) porque no tengo — ni vos todavía
+tenés — un bucket con credenciales válidas. Cuando tengas uno, probalo con
+los pasos de arriba y contame si algo no anda como esperás.
+
+## Estado del proyecto
+
+Con esto quedan andando los tres proveedores previstos (Dropbox y Google
+Drive probados de punta a punta por vos; S3 con el scaffold completo listo
+para cuando tengas un bucket). El flujo end-to-end completo — registro,
+conectar almacenamiento, navegar/crear carpetas, subir imágenes sin
+compresión con chequeo de integridad — funciona igual sin importar cuál de
+los tres esté activo.
