@@ -8,7 +8,7 @@ y sin recomprimir ni recodificar las imágenes en ningún punto del flujo.
 
 - [x] Estructura del proyecto
 - [x] Registro / login / logout con sesiones (cookie httpOnly + SQLite)
-- [ ] Conexión OAuth con Dropbox
+- [x] Conexión OAuth con Dropbox
 - [ ] Navegador de archivos (Dropbox)
 - [ ] Subida de imágenes sin compresión + chequeo de integridad (Dropbox)
 - [ ] Google Drive
@@ -26,12 +26,16 @@ fotoprint/
       db/schema.sql         # definición de tablas
       middleware/auth.js    # requireAuth (guard de sesión)
       routes/auth.js        # /api/auth/register, /login, /logout, /me
+      routes/connections.js # /api/connections (listar/activar/borrar) + OAuth de Dropbox
       services/users.js     # acceso a la tabla users + bcrypt
       services/crypto.js    # cifrado AES-256-GCM de credenciales de nube
+      services/connections.js # acceso a la tabla cloud_connections
+      services/dropbox.js   # DropboxAuth, intercambio de code/token, cache de access_token en memoria
     data/                    # SQLite en disco (gitignored)
     .env.example
   public/                    # frontend estático, vanilla JS (sin build step)
-    index.html               # dashboard (placeholder de explorador de archivos)
+    index.html               # dashboard (muestra proveedor activo)
+    connect.html              # pantalla "Conectar almacenamiento"
     login.html
     register.html
     css/style.css
@@ -74,34 +78,52 @@ npm run dev   # o: npm start
 
 El servidor sirve el frontend estático y la API en `http://localhost:3000`.
 
-## Próximo paso: crear una app de Dropbox para probar OAuth
+## Conexión con Dropbox (OAuth)
 
-Para el siguiente paso (conectar Dropbox) hace falta una app registrada en el
-Dropbox App Console. Pasos:
+Ya está implementado el flujo completo:
 
-1. Entrar a https://www.dropbox.com/developers/apps y crear una cuenta de
-   desarrollador si no tenés una.
-2. **Create app**:
-   - **Choose an API**: `Scoped access`
-   - **Access type**: `App folder` (la app solo ve una carpeta propia dentro de
-     `Apps/`, más simple y seguro para probar) o `Full Dropbox` si querés que
-     el usuario navegue todo su Dropbox. Para el explorador de archivos que
-     describiste (navegar carpetas existentes) conviene `Full Dropbox`.
-   - **Name**: cualquiera, ej. `fotoprint-dev`.
-3. En la pestaña **Permissions** de la app, activar (mínimo):
-   - `files.metadata.read`
-   - `files.metadata.write` (para crear carpetas)
-   - `files.content.read`
-   - `files.content.write`
-   - Guardar (`Submit`).
-4. En la pestaña **Settings**:
-   - Copiar **App key** y **App secret**.
-   - En **OAuth 2** → **Redirect URIs**, agregar la URL de callback que vamos a
-     usar, por ejemplo `http://localhost:3000/api/connections/dropbox/callback`
-     (se define en el siguiente paso de implementación).
-5. Pasarme el **App key** y **App secret** para cargarlos en
-   `backend/.env` (`DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET`) — nunca se
-   commitean al repo.
+- `GET /api/connections/dropbox/start`: genera un `state` random (anti-CSRF),
+  lo guarda en la sesión y redirige a Dropbox (`token_access_type=offline`
+  para pedir `refresh_token`).
+- `GET /api/connections/dropbox/callback`: valida el `state`, intercambia el
+  `code` por tokens, obtiene el email de la cuenta de Dropbox, cifra y guarda
+  el `refresh_token` en `cloud_connections`, y marca la conexión como activa
+  (desactivando cualquier otra que el usuario tuviera). Ante cualquier error
+  (usuario cancela, `state` inválido/vencido, falla la llamada a Dropbox)
+  redirige a `/connect.html?error=...` con un mensaje legible.
+- `services/dropbox.js` cachea el `access_token` en memoria del proceso
+  (nunca en disco) y lo refresca con el `refresh_token` cuando falta o está
+  por vencer (Dropbox los emite con ~4hs de vida).
+- Pantalla `/connect.html`: lista Dropbox / Google Drive / S3, botón
+  **Conectar** para Dropbox (Google Drive y S3 muestran "Próximamente" hasta
+  el siguiente paso), botón **Usar este** para cambiar cuál conexión está
+  activa, y **Desconectar** para borrarla.
 
-Con eso puedo implementar y probar el flujo de conexión OAuth de punta a
-punta en el siguiente paso.
+**Importante — Redirect URI**: la URI de callback que este servidor usa es
+`${BASE_URL}/api/connections/dropbox/callback`. Con la configuración por
+defecto (`BASE_URL=http://localhost:3000`) tiene que estar agregada
+exactamente como `http://localhost:3000/api/connections/dropbox/callback`
+en el Dropbox App Console → **Settings** → **OAuth 2** → **Redirect URIs**,
+si no Dropbox va a rechazar el login con `redirect_uri_mismatch`.
+
+### Cómo probarlo
+
+1. `cd backend && npm run dev`
+2. Iniciar sesión en `http://localhost:3000/login.html`
+3. Ir a `http://localhost:3000/connect.html` y click en **Conectar** (Dropbox)
+4. Autorizar en la pantalla de Dropbox
+5. Deberías volver a `/connect.html?connected=dropbox` con la card de Dropbox
+   en estado "Activo" y tu email de Dropbox como `account_label`
+
+Lo único que no pude probar yo mismo end-to-end es el login real contra
+`dropbox.com` (necesita tu cuenta de Dropbox en un navegador). Probé con
+Playwright y curl todo lo demás: generación de la URL de autorización,
+manejo de `state` inválido/vencido, cancelación del usuario, y la UI de
+listar/activar/desconectar conexiones (simulando una conexión guardada
+directamente en la base).
+
+## Próximo paso
+
+Navegador de archivos de Dropbox: listar carpetas/archivos, crear carpetas,
+navegar con breadcrumbs, y después la subida de imágenes sin compresión con
+chequeo de integridad de tamaño.

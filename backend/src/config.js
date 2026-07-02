@@ -21,5 +21,8 @@ export const config = {
   dropbox: {
     appKey: process.env.DROPBOX_APP_KEY || '',
     appSecret: process.env.DROPBOX_APP_SECRET || '',
+    get redirectUri() {
+      return `${config.baseUrl}/api/connections/dropbox/callback`;
+    },
   },
 };

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>fotoprint - Conectar almacenamiento</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    .provider-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .provider-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      background: var(--card-bg);
+    }
+    .provider-card .name {
+      font-weight: 600;
+    }
+    .provider-card .status {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e6f4ea;
+      color: #1e7e34;
+      margin-left: 8px;
+    }
+    .provider-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-secondary {
+      background: #eee;
+      color: var(--text);
+      padding: 8px 14px;
+    }
+    .btn-primary-sm {
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 14px;
+    }
+    .btn-danger {
+      background: #fdecea;
+      color: var(--error);
+      padding: 8px 14px;
+    }
+    a.btn-primary-sm {
+      text-decoration: none;
+      display: inline-block;
+    }
+    .success-box {
+      background: #e6f4ea;
+      color: #1e7e34;
+      border: 1px solid #b7dfc0;
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-size: 0.85rem;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">fotoprint</div>
+    <div>
+      <span class="user-email" id="user-email"></span>
+      <button class="link-button" id="logout-btn">Cerrar sesion</button>
+    </div>
+  </div>
+
+  <main class="container">
+    <h2>Conectar almacenamiento</h2>
+    <p>Elegi el proveedor de nube donde queres subir y explorar tus imagenes. Podes tener varios conectados y elegir cual usar.</p>
+
+    <div id="error-box" class="error-box"></div>
+    <div id="success-box" class="success-box" style="display:none"></div>
+
+    <div class="provider-list" id="provider-list"></div>
+  </main>
+
+  <script type="module">
+    import { apiFetch } from '/js/api.js';
+
+    const PROVIDER_LABELS = {
+      dropbox: 'Dropbox',
+      google_drive: 'Google Drive',
+      s3: 'Amazon S3',
+    };
+
+    const listEl = document.getElementById('provider-list');
+    const errorBox = document.getElementById('error-box');
+    const successBox = document.getElementById('success-box');
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.classList.add('visible');
+    }
+
+    function render(connections) {
+      const byProvider = Object.fromEntries(connections.map((c) => [c.provider, c]));
+      listEl.innerHTML = '';
+
+      for (const provider of ['dropbox', 'google_drive', 's3']) {
+        const conn = byProvider[provider];
+        const card = document.createElement('div');
+        card.className = 'provider-card';
+
+        const info = document.createElement('div');
+        const nameLine = document.createElement('div');
+        nameLine.className = 'name';
+        nameLine.textContent = PROVIDER_LABELS[provider];
+        if (conn && conn.is_active) {
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = 'Activo';
+          nameLine.appendChild(badge);
+        }
+        info.appendChild(nameLine);
+
+        const statusLine = document.createElement('div');
+        statusLine.className = 'status';
+        statusLine.textContent = conn ? `Conectado como ${conn.account_label}` : 'No conectado';
+        info.appendChild(statusLine);
+
+        card.appendChild(info);
+
+        const actions = document.createElement('div');
+        actions.className = 'provider-actions';
+
+        if (!conn) {
+          if (provider === 'dropbox') {
+            const link = document.createElement('a');
+            link.href = '/api/connections/dropbox/start';
+            link.className = 'btn-primary-sm';
+            link.textContent = 'Conectar';
+            actions.appendChild(link);
+          } else {
+            const soon = document.createElement('span');
+            soon.className = 'status';
+            soon.textContent = 'Proximamente';
+            actions.appendChild(soon);
+          }
+        } else {
+          if (!conn.is_active) {
+            const useBtn = document.createElement('button');
+            useBtn.className = 'btn-secondary';
+            useBtn.textContent = 'Usar este';
+            useBtn.addEventListener('click', () => activate(provider));
+            actions.appendChild(useBtn);
+          }
+          const disconnectBtn = document.createElement('button');
+          disconnectBtn.className = 'btn-danger';
+          disconnectBtn.textContent = 'Desconectar';
+          disconnectBtn.addEventListener('click', () => disconnect(provider));
+          actions.appendChild(disconnectBtn);
+        }
+
+        card.appendChild(actions);
+        listEl.appendChild(card);
+      }
+    }
+
+    async function load() {
+      const { connections } = await apiFetch('/api/connections');
+      render(connections);
+    }
+
+    async function activate(provider) {
+      try {
+        const { connections } = await apiFetch(`/api/connections/${provider}/activate`, { method: 'POST' });
+        render(connections);
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    async function disconnect(provider) {
+      try {
+        const { connections } = await apiFetch(`/api/connections/${provider}`, { method: 'DELETE' });
+        render(connections);
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    async function init() {
+      try {
+        const { user } = await apiFetch('/api/auth/me');
+        document.getElementById('user-email').textContent = user.email;
+      } catch {
+        window.location.href = '/login.html';
+        return;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('error')) {
+        showError(params.get('error'));
+      }
+      if (params.get('connected')) {
+        successBox.style.display = 'block';
+        successBox.textContent = `Conectaste ${PROVIDER_LABELS[params.get('connected')] || params.get('connected')} correctamente.`;
+      }
+      if (params.get('error') || params.get('connected')) {
+        window.history.replaceState({}, '', '/connect.html');
+      }
+
+      await load();
+    }
+
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      await apiFetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login.html';
+    });
+
+    init();
+  </script>
+</body>
+</html>
