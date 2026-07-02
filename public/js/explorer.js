@@ -2,7 +2,17 @@ import { apiFetch } from './api.js';
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff', 'tif', 'svg']);
 
-let currentPath = '';
+const ROOT_LABELS = {
+  dropbox: 'Mi Dropbox',
+  google_drive: 'Mi Drive',
+};
+
+// "ref" es opaco por proveedor (path para Dropbox, id de archivo para
+// Drive), asi que la navegacion no se puede reconstruir parseando un
+// string: se mantiene como una pila de {ref, name} armada en el cliente a
+// medida que el usuario entra/sale de carpetas.
+let breadcrumbStack = [{ ref: '', name: 'Raiz' }];
+let currentRef = '';
 
 const els = {
   noConnection: document.getElementById('no-connection'),
@@ -48,33 +58,25 @@ function formatSize(bytes) {
   return `${value.toFixed(1)} ${units[unitIndex]}`;
 }
 
-function renderBreadcrumb(path) {
+function renderBreadcrumb(stack) {
   els.breadcrumb.innerHTML = '';
 
-  const rootBtn = document.createElement('button');
-  rootBtn.type = 'button';
-  rootBtn.textContent = 'Mi Dropbox';
-  if (path === '') rootBtn.disabled = true;
-  rootBtn.addEventListener('click', () => loadFolder(''));
-  els.breadcrumb.appendChild(rootBtn);
+  stack.forEach((segment, index) => {
+    if (index > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'sep';
+      sep.textContent = '/';
+      els.breadcrumb.appendChild(sep);
+    }
 
-  if (path === '') return;
-
-  const segments = path.split('/').filter(Boolean);
-  let accum = '';
-  segments.forEach((segment, index) => {
-    const sep = document.createElement('span');
-    sep.className = 'sep';
-    sep.textContent = '/';
-    els.breadcrumb.appendChild(sep);
-
-    accum += `/${segment}`;
-    const targetPath = accum;
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.textContent = segment;
-    if (index === segments.length - 1) btn.disabled = true;
-    btn.addEventListener('click', () => loadFolder(targetPath));
+    btn.textContent = segment.name;
+    if (index === stack.length - 1) btn.disabled = true;
+    btn.addEventListener('click', () => {
+      breadcrumbStack = stack.slice(0, index + 1);
+      loadFolder(breadcrumbStack[breadcrumbStack.length - 1].ref, breadcrumbStack);
+    });
     els.breadcrumb.appendChild(btn);
   });
 }
@@ -112,25 +114,37 @@ function renderEntries(entries) {
     }
 
     if (entry.type === 'folder') {
-      row.addEventListener('click', () => loadFolder(entry.path));
+      row.addEventListener('click', () => {
+        const newStack = [...breadcrumbStack, { ref: entry.ref, name: entry.name }];
+        loadFolder(entry.ref, newStack);
+      });
     }
 
     els.entryList.appendChild(row);
   }
 }
 
-async function loadFolder(path) {
+// stack es opcional: si no se pasa, se recarga currentRef sin tocar el
+// breadcrumb (util despues de crear una carpeta o subir un archivo).
+async function loadFolder(ref, stack) {
   clearError();
   els.entryList.innerHTML = '<div class="empty-state">Cargando...</div>';
   try {
-    const { entries } = await apiFetch(`/api/files?path=${encodeURIComponent(path)}`);
-    currentPath = path;
-    renderBreadcrumb(path);
+    const { entries } = await apiFetch(`/api/files?parent=${encodeURIComponent(ref)}`);
+    currentRef = ref;
+    if (stack) breadcrumbStack = stack;
+    renderBreadcrumb(breadcrumbStack);
     renderEntries(entries);
 
     const url = new URL(window.location.href);
-    if (path) url.searchParams.set('path', path);
-    else url.searchParams.delete('path');
+    const leaf = breadcrumbStack[breadcrumbStack.length - 1];
+    if (leaf.ref) {
+      url.searchParams.set('parent', leaf.ref);
+      url.searchParams.set('parentName', leaf.name);
+    } else {
+      url.searchParams.delete('parent');
+      url.searchParams.delete('parentName');
+    }
     window.history.replaceState({}, '', url);
   } catch (err) {
     els.entryList.innerHTML = '';
@@ -159,11 +173,11 @@ els.newFolderForm.addEventListener('submit', async (event) => {
   try {
     await apiFetch('/api/files/folders', {
       method: 'POST',
-      body: JSON.stringify({ path: currentPath, name }),
+      body: JSON.stringify({ parent: currentRef, name }),
     });
     els.newFolderForm.style.display = 'none';
     els.newFolderBtn.style.display = '';
-    await loadFolder(currentPath);
+    await loadFolder(currentRef);
   } catch (err) {
     showError(err.message);
   }
@@ -171,11 +185,11 @@ els.newFolderForm.addEventListener('submit', async (event) => {
 
 // Sube con XMLHttpRequest (en vez de fetch) para poder mostrar progreso real
 // de subida via xhr.upload.onprogress.
-function uploadFileXHR(file, path, onProgress) {
+function uploadFileXHR(file, parent, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
-    formData.append('path', path);
+    formData.append('parent', parent);
     formData.append('file', file, file.name);
 
     xhr.upload.addEventListener('progress', (event) => {
@@ -231,12 +245,12 @@ function createUploadQueueItem(name) {
 
 async function handleFiles(fileList) {
   const files = Array.from(fileList);
-  const path = currentPath;
+  const parent = currentRef;
 
   for (const file of files) {
     const item = createUploadQueueItem(file.name);
     try {
-      await uploadFileXHR(file, path, (fraction) => {
+      await uploadFileXHR(file, parent, (fraction) => {
         item.barFill.style.width = `${Math.round(fraction * 100)}%`;
       });
       item.barFill.style.width = '100%';
@@ -249,8 +263,8 @@ async function handleFiles(fileList) {
     }
   }
 
-  if (path === currentPath) {
-    await loadFolder(currentPath);
+  if (parent === currentRef) {
+    await loadFolder(currentRef);
   }
 }
 
@@ -283,7 +297,7 @@ async function loadConnectionStatus() {
   const { connections } = await apiFetch('/api/connections');
   const active = connections.find((c) => c.is_active);
 
-  if (!active || active.provider !== 'dropbox') {
+  if (!active || !ROOT_LABELS[active.provider]) {
     els.noConnection.style.display = 'block';
     els.explorer.style.display = 'none';
     return;
@@ -291,8 +305,18 @@ async function loadConnectionStatus() {
 
   els.noConnection.style.display = 'none';
   els.explorer.style.display = 'block';
+
+  const rootLabel = ROOT_LABELS[active.provider];
   const params = new URLSearchParams(window.location.search);
-  await loadFolder(params.get('path') || '');
+  const parentRef = params.get('parent') || '';
+  const parentName = params.get('parentName');
+
+  breadcrumbStack =
+    parentRef && parentName
+      ? [{ ref: '', name: rootLabel }, { ref: parentRef, name: parentName }]
+      : [{ ref: '', name: rootLabel }];
+
+  await loadFolder(parentRef, breadcrumbStack);
 }
 
 async function init() {

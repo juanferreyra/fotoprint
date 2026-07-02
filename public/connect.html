@@ -113,9 +113,9 @@
         actions.className = 'provider-actions';
 
         if (!conn) {
-          if (provider === 'dropbox') {
+          if (provider === 'dropbox' || provider === 'google_drive') {
             const link = document.createElement('a');
-            link.href = '/api/connections/dropbox/start';
+            link.href = `/api/connections/${provider}/start`;
             link.className = 'btn-primary-sm';
             link.textContent = 'Conectar';
             actions.appendChild(link);

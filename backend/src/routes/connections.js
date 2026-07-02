@@ -8,6 +8,7 @@ import {
   saveConnection,
 } from '../services/connections.js';
 import * as dropbox from '../services/dropbox.js';
+import * as googleDrive from '../services/googleDrive.js';
 
 export const connectionsRouter = Router();
 
@@ -81,5 +82,50 @@ connectionsRouter.get('/dropbox/callback', async (req, res, next) => {
   } catch (err) {
     console.error('Error en callback de Dropbox OAuth:', err);
     res.redirect(`/connect.html?error=${encodeURIComponent('No se pudo completar la conexion con Dropbox.')}`);
+  }
+});
+
+// --- Google Drive OAuth ---
+
+connectionsRouter.get('/google_drive/start', (req, res) => {
+  const state = crypto.randomBytes(24).toString('hex');
+  req.session.googleDriveOAuthState = state;
+  const url = googleDrive.getAuthenticationUrl(state);
+  res.redirect(url);
+});
+
+connectionsRouter.get('/google_drive/callback', async (req, res) => {
+  const { state, code, error: oauthError } = req.query;
+  const expectedState = req.session.googleDriveOAuthState;
+  delete req.session.googleDriveOAuthState;
+
+  if (oauthError) {
+    return res.redirect(`/connect.html?error=${encodeURIComponent('Autorizacion cancelada en Google.')}`);
+  }
+  if (!state || !expectedState || state !== expectedState) {
+    return res.redirect(`/connect.html?error=${encodeURIComponent('El pedido de conexion expiro o es invalido. Proba de nuevo.')}`);
+  }
+  if (typeof code !== 'string') {
+    return res.redirect(`/connect.html?error=${encodeURIComponent('Google no devolvio un codigo de autorizacion.')}`);
+  }
+
+  try {
+    const tokens = await googleDrive.exchangeCodeForToken(code);
+    if (!tokens.refresh_token) {
+      return res.redirect(
+        `/connect.html?error=${encodeURIComponent('Google no devolvio un refresh token. Revoca el acceso de fotoprint en myaccount.google.com/permissions y proba de nuevo.')}`
+      );
+    }
+
+    const account = await googleDrive.getAccountInfo(tokens);
+
+    saveConnection(req.session.userId, 'google_drive', account.email || 'Google Drive', {
+      refresh_token: tokens.refresh_token,
+    });
+
+    res.redirect('/connect.html?connected=google_drive');
+  } catch (err) {
+    console.error('Error en callback de Google Drive OAuth:', err);
+    res.redirect(`/connect.html?error=${encodeURIComponent('No se pudo completar la conexion con Google Drive.')}`);
   }
 });

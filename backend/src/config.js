@@ -25,4 +25,11 @@ export const config = {
       return `${config.baseUrl}/api/connections/dropbox/callback`;
     },
   },
+  googleDrive: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    get redirectUri() {
+      return `${config.baseUrl}/api/connections/google_drive/callback`;
+    },
+  },
 };

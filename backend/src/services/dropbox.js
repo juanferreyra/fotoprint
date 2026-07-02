@@ -129,20 +129,26 @@ async function withDropboxClient(userId, fn) {
 
 const MAX_ENTRIES = 2000;
 
+// El "ref" que expone la API generica de fotoprint es, para Dropbox,
+// directamente el path (path_display). La raiz se representa como ''.
 function mapEntry(entry) {
   return {
     type: entry['.tag'],
     name: entry.name,
-    path: entry.path_display,
+    ref: entry.path_display,
     size: entry['.tag'] === 'file' ? entry.size : undefined,
     serverModified: entry['.tag'] === 'file' ? entry.server_modified : undefined,
   };
 }
 
-export async function listFolder(userId, folderPath) {
+function joinPath(parentRef, name) {
+  return parentRef === '' ? `/${name}` : `${parentRef}/${name}`;
+}
+
+export async function listFolder(userId, parentRef) {
   return withDropboxClient(userId, async (client) => {
     const response = await client.filesListFolder({
-      path: folderPath,
+      path: parentRef,
       include_non_downloadable_files: true,
     });
     let { entries, cursor, has_more: hasMore } = response.result;
@@ -164,19 +170,19 @@ export async function listFolder(userId, folderPath) {
   });
 }
 
-export async function createFolder(userId, folderPath) {
+export async function createFolder(userId, parentRef, name) {
   return withDropboxClient(userId, async (client) => {
-    const response = await client.filesCreateFolderV2({ path: folderPath });
+    const response = await client.filesCreateFolderV2({ path: joinPath(parentRef, name) });
     return mapEntry({ '.tag': 'folder', ...response.result.metadata });
   });
 }
 
 // Sube el buffer tal cual llego del request, sin ningun procesamiento.
 // autorename evita pisar un archivo existente con el mismo nombre.
-export async function uploadFile(userId, filePath, buffer) {
+export async function uploadFile(userId, parentRef, name, buffer) {
   return withDropboxClient(userId, async (client) => {
     const response = await client.filesUpload({
-      path: filePath,
+      path: joinPath(parentRef, name),
       contents: buffer,
       mode: { '.tag': 'add' },
       autorename: true,
@@ -186,8 +192,8 @@ export async function uploadFile(userId, filePath, buffer) {
   });
 }
 
-export async function deleteFile(userId, filePath) {
+export async function deleteFile(userId, ref) {
   return withDropboxClient(userId, async (client) => {
-    await client.filesDeleteV2({ path: filePath });
+    await client.filesDeleteV2({ path: ref });
   });
 }

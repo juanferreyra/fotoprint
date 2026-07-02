@@ -11,7 +11,7 @@ y sin recomprimir ni recodificar las imágenes en ningún punto del flujo.
 - [x] Conexión OAuth con Dropbox
 - [x] Navegador de archivos (Dropbox)
 - [x] Subida de imágenes sin compresión + chequeo de integridad (Dropbox)
-- [ ] Google Drive
+- [x] Conexión OAuth + navegador de archivos + subida (Google Drive)
 - [ ] Amazon S3
 
 ## Arquitectura
@@ -26,13 +26,16 @@ fotoprint/
       db/schema.sql         # definición de tablas
       middleware/auth.js    # requireAuth (guard de sesión)
       routes/auth.js        # /api/auth/register, /login, /logout, /me
-      routes/connections.js # /api/connections (listar/activar/borrar) + OAuth de Dropbox
-      routes/files.js       # /api/files (listar) y /api/files/folders (crear carpeta)
+      routes/connections.js # /api/connections (listar/activar/borrar) + OAuth de Dropbox y Google Drive
+      routes/files.js       # /api/files, /api/files/folders, /api/files/upload
+                             # (generico: despacha a services/dropbox.js o services/googleDrive.js
+                             # segun cual sea el proveedor activo del usuario)
       services/users.js     # acceso a la tabla users + bcrypt
       services/crypto.js    # cifrado AES-256-GCM de credenciales de nube
       services/connections.js # acceso a la tabla cloud_connections
-      services/dropbox.js   # DropboxAuth, cache de access_token, listFolder/createFolder,
+      services/dropbox.js   # DropboxAuth, cache de access_token, listFolder/createFolder/uploadFile,
                              # mapeo de errores del SDK a mensajes legibles
+      services/googleDrive.js # OAuth2 (googleapis), Drive API v3, misma interfaz que dropbox.js
     data/                    # SQLite en disco (gitignored)
     .env.example
   public/                    # frontend estático, vanilla JS (sin build step)
@@ -65,6 +68,19 @@ fotoprint/
   RAM, nunca se escribe a disco) y se van a mandar tal cual al SDK del
   proveedor. No hay ninguna librería de procesamiento de imágenes (sharp, jimp,
   canvas) en el proyecto.
+- **Multi-proveedor (Dropbox / Google Drive / S3)**: `routes/files.js` no sabe
+  nada de Dropbox ni de Drive puntualmente — despacha según
+  `connection.provider` a un módulo de `services/` que implementa siempre la
+  misma interfaz (`listFolder`, `createFolder`, `uploadFile`, `deleteFile`).
+  La API HTTP usa un `ref` opaco por proveedor en vez de un path real: para
+  Dropbox el `ref` es literalmente el path (`/Fotos/Playa`), para Drive es el
+  `id` del archivo/carpeta (Drive no tiene paths reales — un mismo nombre de
+  carpeta puede repetirse, así que solo el `id` identifica un recurso sin
+  ambigüedad). La raíz siempre es `ref = ''`.
+  El frontend (`js/explorer.js`) tampoco parsea el `ref` como un path: arma
+  el breadcrumb como una pila `{ref, name}` en el cliente a medida que el
+  usuario entra/sale de carpetas, lo que funciona igual sin importar si el
+  `ref` es un path o un id opaco.
 
 ## Cómo correr el backend localmente
 
@@ -125,104 +141,138 @@ manejo de `state` inválido/vencido, cancelación del usuario, y la UI de
 listar/activar/desconectar conexiones (simulando una conexión guardada
 directamente en la base).
 
-## Navegador de archivos (Dropbox)
+## Navegador de archivos y subida (Dropbox y Google Drive)
 
-- `GET /api/files?path=/Carpeta`: lista carpetas y archivos de esa ruta
-  (`path` vacío o ausente = raíz de Dropbox). Pagina automáticamente con
-  `filesListFolderContinue` hasta 2000 entradas.
-- `POST /api/files/folders` (`{ path, name }`): crea una carpeta dentro de
-  `path`. Valida que `name` no esté vacío, no tenga `/` ni `\`, y no supere
+La API es la misma para cualquier proveedor conectado — `routes/files.js`
+despacha internamente según `connection.provider`:
+
+- `GET /api/files?parent=<ref>`: lista carpetas y archivos dentro de `parent`
+  (`ref` vacío o ausente = raíz). Pagina automáticamente (2000 entradas tope).
+- `POST /api/files/folders` (`{ parent, name }`): crea una carpeta dentro de
+  `parent`. Valida que `name` no esté vacío, no tenga `/` ni `\`, y no supere
   255 caracteres.
-- Los errores del SDK de Dropbox (token vencido, carpeta inexistente, nombre
-  duplicado, rate limit, sin espacio) se traducen a mensajes en español con
-  el HTTP status correspondiente en `services/dropbox.js` (`toFriendlyError`).
-  Un 401 de Dropbox invalida el `access_token` cacheado para forzar un
-  refresh en el próximo pedido.
-- Frontend (`index.html` + `js/explorer.js`): breadcrumb clickeable, listado
-  con ícono de carpeta / ícono genérico de imagen (por extensión) / ícono
-  genérico de archivo — sin pedir thumbnails a la API para mantenerlo
-  liviano —, tamaño formateado (B/KB/MB/GB), botón **Nueva carpeta** con
-  formulario inline, y estado vacío cuando la carpeta no tiene contenido.
-  El path actual queda reflejado en la URL (`?path=...`) para poder
-  refrescar sin perder la ubicación.
+- `POST /api/files/upload` (`multipart/form-data`, campos `parent` y `file`):
+  recibe el archivo con `multer` en memoria (nunca se escribe a disco) y
+  manda el buffer tal cual al SDK del proveedor — no hay ninguna librería de
+  procesamiento de imágenes en el pipeline. Límite de 150MB por archivo
+  (devuelve 413 si se supera). **Chequeo de integridad**: se compara el
+  `size` que el proveedor confirma haber guardado contra el tamaño del
+  archivo original; si no coinciden, se borra el archivo recién subido y se
+  devuelve un error pidiendo reintentar — nunca se deja un archivo "creído
+  subido" pero corrupto en la nube del usuario.
+- Cada proveedor traduce sus propios errores (token vencido, carpeta
+  inexistente, nombre duplicado, rate limit, sin espacio, archivo muy
+  grande) a mensajes en español con el HTTP status correspondiente
+  (`toFriendlyError` en `services/dropbox.js` / `services/googleDrive.js`).
+  Un 401 invalida el `access_token` cacheado para forzar un refresh en el
+  próximo pedido.
+- Frontend (`index.html` + `js/explorer.js`): breadcrumb clickeable (pila
+  `{ref, name}` armada en el cliente, no parsea el `ref` como path), ícono
+  de carpeta / ícono genérico de imagen (por extensión) / ícono genérico de
+  archivo — sin pedir thumbnails a la API para mantenerlo liviano —, tamaño
+  formateado (B/KB/MB/GB), botón **Nueva carpeta**, zona de **drag & drop**
+  + selector de archivo con barra de progreso real por archivo (vía
+  `XMLHttpRequest.upload.onprogress`, ya que `fetch` no expone progreso de
+  subida). El folder actual queda reflejado en la URL (`?parent=...`) para
+  poder refrescar sin perder del todo la ubicación (se reconstruye un
+  breadcrumb de 2 niveles: raíz + carpeta actual).
 
 **Nota sobre las pruebas de este paso**: el entorno donde yo corro no tiene
-salida de red hacia `api.dropboxapi.com` (política de egress del sandbox),
-así que no pude probar una llamada real y exitosa a la API de Dropbox desde
-acá. Sí probé, con curl y Playwright:
-- Validaciones de `path` y `name` (nombres con `/`, vacíos, path traversal).
-- El manejo de errores end-to-end contra la Dropbox API real (con un
-  `refresh_token` inválido) para confirmar que los errores se traducen a
-  JSON legible y no explotan como 500 genérico.
-- El renderizado completo del explorador (breadcrumbs, íconos, tamaños,
-  navegación ida y vuelta, alta de carpeta) simulando las respuestas de
-  `/api/files` con datos de prueba vía interceptación de red en Playwright.
+salida de red hacia `api.dropboxapi.com` ni `www.googleapis.com` (política
+de egress del sandbox), así que no pude probar un listado/subida real y
+exitoso contra ninguno de los dos proveedores desde acá. Sí probé, con curl
+y Playwright, para ambos proveedores:
+- Validaciones de `parent`/`name` (nombres con `/`, vacíos, path traversal,
+  archivo de 150MB+ devolviendo 413).
+- El manejo de errores end-to-end contra las APIs reales (con un
+  `refresh_token` inválido, para ambos proveedores) para confirmar que los
+  errores se traducen a JSON legible y no explotan como 500 genérico.
+- El renderizado completo del explorador (breadcrumbs multi-nivel con
+  `ref` opacos tipo id de Drive, íconos, tamaños, navegación ida y vuelta,
+  alta de carpeta, subida con progreso, reload tras refrescar la página)
+  simulando las respuestas de `/api/files` con datos de prueba vía
+  interceptación de red en Playwright.
 
-Como vos ya tenés la conexión real funcionando en tu máquina, para probarlo
-de punta a punta: `cd backend && npm run dev`, entrá a
-`http://localhost:3000/index.html` logueado, y deberías ver las
-carpetas/archivos reales de tu Dropbox. Contame si ves algo raro (por
-ejemplo, carpetas con muchísimos archivos, nombres con caracteres
-especiales, etc.).
+Como vos ya tenés Dropbox funcionando en tu máquina, para probarlo de punta
+a punta: `cd backend && npm run dev`, entrá a `http://localhost:3000/index.html`
+logueado, y deberías ver las carpetas/archivos reales. Fijate en particular
+que la navegación entre carpetas y "Nueva carpeta" sigan funcionando igual
+que antes (este paso tocó el contrato interno de la API, aunque el
+comportamiento visible no debería haber cambiado).
 
-## Subida de imágenes (Dropbox)
+## Conexión con Google Drive (OAuth)
 
-- `POST /api/files/upload` (`multipart/form-data`, campos `path` y `file`):
-  recibe el archivo con `multer` en memoria (`memoryStorage`, nunca se
-  escribe a disco) y manda el buffer tal cual al SDK de Dropbox
-  (`filesUpload`) — no hay ninguna libreria de procesamiento de imagenes en
-  el pipeline, el binario que llega a Dropbox es identico al que subio el
-  usuario.
-- **Chequeo de integridad**: despues de subir, se compara el `size` que
-  Dropbox confirma haber guardado contra `req.file.size` (tamaño exacto del
-  buffer recibido). Si no coinciden, se borra el archivo recien subido
-  (`filesDeleteV2`) y se devuelve un error 502 pidiendo reintentar — nunca
-  se deja un archivo "creido subido" pero corrupto en la nube del usuario.
-- Limite de 150MB por archivo (limite de Dropbox para `filesUpload` en un
-  solo request; archivos mas grandes necesitarian "upload sessions"
-  chunkeadas, que quedan fuera de alcance de este paso). Se devuelve 413 con
-  mensaje claro si se supera.
-- `autorename: true` evita pisar un archivo existente con el mismo nombre
-  (Dropbox le agrega automaticamente un sufijo tipo `foto (1).jpg`).
-- Frontend: zona de **drag & drop** sobre el explorador + selector de
-  archivo (`accept="image/*"` como filtro, no como restriccion dura), cola
-  de subida con barra de progreso real por archivo (via
-  `XMLHttpRequest.upload.onprogress`, ya que `fetch` no expone progreso de
-  subida), y mensaje de error visible por archivo si algo falla (token
-  vencido, archivo muy grande, etc.). Al terminar, la carpeta se recarga
-  para mostrar el archivo nuevo.
+Mismo patrón que Dropbox, con `services/googleDrive.js` (usa `googleapis`):
 
-**Nota sobre las pruebas de este paso**: igual que con el navegador de
-archivos, este sandbox no tiene salida de red hacia `api.dropboxapi.com`,
-asi que no pude subir un archivo real a Dropbox desde aca. Sí probé:
-- Validaciones (sin archivo, sin conexion activa, sin autenticacion,
-  archivo de 150MB+ devolviendo 413) con curl contra el servidor real.
-- El manejo de errores end-to-end contra la Dropbox API real (con un
-  `refresh_token` invalido) para confirmar que la subida falla con un
-  mensaje claro (502) en vez de romperse.
-- El flujo completo del frontend con Playwright, interceptando la red:
-  drag-over visual, subida via el selector de archivo con los campos
-  correctos en el `multipart/form-data`, barra de progreso llegando a
-  "Listo" y desapareciendo, recarga de la carpeta mostrando el archivo
-  subido, y el caso de error (token vencido) mostrando el mensaje en rojo
-  sin autoeliminarse.
+- `GET /api/connections/google_drive/start` → redirige a Google
+  (`access_type=offline`, `prompt=consent` para garantizar que siempre
+  devuelva `refresh_token`, incluso en reconexiones).
+- `GET /api/connections/google_drive/callback` → valida `state`, intercambia
+  el `code`, obtiene el email de la cuenta (`oauth2.userinfo.get`), cifra y
+  guarda el `refresh_token`, marca la conexión como activa. Si Google no
+  manda `refresh_token` (puede pasar si el usuario ya había autorizado antes
+  sin `prompt=consent`), se lo avisa con un mensaje pidiendo revocar el
+  acceso en `myaccount.google.com/permissions` y reintentar.
+- Scope usado: `https://www.googleapis.com/auth/drive` (acceso completo a
+  Drive). Es necesario para poder navegar carpetas/archivos que el usuario
+  ya tenía antes de conectar la app — el scope restringido `drive.file`
+  solo deja ver archivos creados por la propia app, lo cual no cumple con
+  "ver el explorador de archivos que ya existen en su nube conectada".
+- `google-auth-library` refresca el `access_token` automáticamente; lo
+  cacheamos en memoria del proceso (evento `'tokens'` del `OAuth2Client`)
+  para no pagar una llamada de refresh en cada request.
 
-Para probarlo en tu maquina con tu Dropbox real: `cd backend && npm run dev`,
-entra a `http://localhost:3000/index.html`, y arrastra una imagen (o
-varias) a la zona de subida. Fijate que:
-1. La barra de progreso avance.
-2. El archivo aparezca en la carpeta actual al terminar.
-3. El tamaño en Dropbox coincida con el archivo original (podes compararlo
-   a ojo, o confiar en que si no coincidiera el sistema lo habria borrado y
-   mostrado un error).
+### Cómo crear el OAuth Client en Google Cloud (necesito estas credenciales)
 
-Con esto queda cerrado el flujo completo end-to-end para Dropbox: login →
-conectar cuenta → navegar carpetas → crear carpetas → subir imagenes sin
-compresion con chequeo de integridad.
+1. Entrá a https://console.cloud.google.com/ y creá un proyecto (o usá uno
+   existente).
+2. **APIs & Services → Library**: buscá "Google Drive API" y clickeá
+   **Enable**.
+3. **APIs & Services → OAuth consent screen**:
+   - **User Type**: `External` (a menos que tengas Google Workspace).
+   - Completá nombre de la app, email de soporte, etc.
+   - **Scopes**: agregá `.../auth/drive` y `.../auth/userinfo.email`.
+   - **Test users**: agregá tu propia cuenta de Gmail. Mientras la app esté
+     en modo "Testing" (no verificada por Google), **solo** las cuentas que
+     agregues acá van a poder conectarse — para desarrollo/uso personal esto
+     alcanza y evita el proceso de verificación de Google (que aplica para
+     apps públicas con scopes sensibles como `drive` completo).
+4. **APIs & Services → Credentials → Create Credentials → OAuth client ID**:
+   - **Application type**: `Web application`.
+   - **Authorized redirect URIs**: agregá exactamente
+     `http://localhost:3000/api/connections/google_drive/callback`
+     (o el equivalente si cambiaste `BASE_URL`).
+5. Copiá el **Client ID** y el **Client Secret**, y cargalos en
+   `backend/.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) — nunca se
+   commitean al repo.
+
+### Cómo probarlo
+
+1. `cd backend && npm run dev`
+2. Logueado, andá a `http://localhost:3000/connect.html`
+3. Click en **Conectar** (Google Drive), autorizá con la cuenta de Gmail que
+   agregaste como test user
+4. Deberías volver a `/connect.html?connected=google_drive` con la card en
+   estado "Activo" y tu email de Gmail como `account_label`
+5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador de
+   archivos apuntando a "Mi Drive" con tus carpetas/archivos reales
+
+Al igual que con Dropbox, no pude probar el login real contra
+`accounts.google.com` desde este sandbox (sin salida de red). Sí probé con
+curl: que `/start` arma la URL de autorización con los parámetros correctos
+(`scope`, `access_type=offline`, `prompt=consent`, `redirect_uri`), y el
+manejo de `state` inválido/cancelación de usuario. Con Playwright probé que
+el botón "Conectar" ya aparece habilitado en `/connect.html` para Google
+Drive (dejó de mostrar "Próximamente").
 
 ## Próximo paso
 
-Sumar Google Drive y Amazon S3 siguiendo el mismo patron: cada uno con su
-propio modulo en `services/`, reutilizando `routes/connections.js` y
-`routes/files.js` (que hoy asumen Dropbox como unico proveedor activo, va a
-haber que generalizarlos para despachar segun `connection.provider`).
+Sumar Amazon S3, que a diferencia de Dropbox/Drive no usa OAuth sino un
+formulario de credenciales (access key, secret key, bucket, región) — va a
+necesitar una pantalla distinta en `connect.html` para cargar esos datos en
+vez de un botón "Conectar" que redirige. La lógica de `routes/files.js` no
+debería necesitar cambios: solo hace falta un `services/s3.js` que
+implemente la misma interfaz (`listFolder`, `createFolder`, `uploadFile`,
+`deleteFile`) usando `@aws-sdk/client-s3`, sabiendo que S3 tampoco tiene
+carpetas reales — se simulan con objetos "carpeta" que terminan en `/` o
+inferencia por prefijo de key.

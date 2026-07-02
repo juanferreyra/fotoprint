@@ -1,18 +1,34 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { requireAuth } from '../middleware/auth.js';
+import { getActiveConnection } from '../services/connections.js';
 import * as dropboxService from '../services/dropbox.js';
+import * as googleDriveService from '../services/googleDrive.js';
 
 export const filesRouter = Router();
 
 filesRouter.use(requireAuth);
 
-// Limite de subida en un solo request de Dropbox (filesUpload no soporta mas).
-// Archivos mas grandes necesitarian upload sessions (fuera de alcance por ahora).
+// Cada proveedor implementa la misma interfaz:
+//   listFolder(userId, parentRef) -> [{ type, name, ref, size, serverModified }]
+//   createFolder(userId, parentRef, name) -> { type: 'folder', name, ref }
+//   uploadFile(userId, parentRef, name, buffer) -> { type: 'file', name, ref, size }
+//   deleteFile(userId, ref) -> void
+// "ref" es opaco por proveedor: para Dropbox es el path, para Drive el id
+// del archivo/carpeta. La raiz siempre es ''.
+const PROVIDER_SERVICES = {
+  dropbox: dropboxService,
+  google_drive: googleDriveService,
+};
+
+// Limite de subida en un solo request (coincide con el limite de Dropbox
+// para filesUpload; lo reutilizamos tambien para Drive por simplicidad).
+// Archivos mas grandes necesitarian upload sessions/resumable uploads,
+// fuera de alcance por ahora.
 const MAX_UPLOAD_BYTES = 150 * 1024 * 1024;
 
-// Buffer en memoria (RAM), nunca se escribe a disco. El buffer se manda
-// tal cual llega al SDK de Dropbox, sin ningun procesamiento de imagen.
+// Buffer en memoria (RAM), nunca se escribe a disco. El buffer se manda tal
+// cual llega al SDK del proveedor, sin ningun procesamiento de imagen.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
@@ -30,14 +46,20 @@ function badRequest(message) {
   return err;
 }
 
-// Normaliza el path que manda el frontend al formato que espera Dropbox:
-// '' para la raiz, o '/Carpeta/Subcarpeta' (sin barra final).
-function normalizePath(raw) {
-  if (raw === undefined || raw === null || raw === '' || raw === '/') return '';
+function getProviderService(userId) {
+  const connection = getActiveConnection(userId);
+  const service = connection && PROVIDER_SERVICES[connection.provider];
+  if (!service) {
+    throw badRequest('No tenes ninguna conexion de almacenamiento activa. Conectala primero en "Conectar almacenamiento".');
+  }
+  return service;
+}
+
+function normalizeRef(raw) {
+  if (raw === undefined || raw === null) return '';
   const value = String(raw).trim();
-  if (value.includes('..')) throw badRequest('Ruta invalida.');
-  const withLeadingSlash = value.startsWith('/') ? value : `/${value}`;
-  return withLeadingSlash.replace(/\/+$/, '');
+  if (value.includes('..')) throw badRequest('Referencia de carpeta invalida.');
+  return value;
 }
 
 function validateFolderName(name) {
@@ -68,9 +90,10 @@ function handleError(err, res) {
 
 filesRouter.get('/', async (req, res) => {
   try {
-    const path = normalizePath(req.query.path);
-    const entries = await dropboxService.listFolder(req.session.userId, path);
-    res.json({ path, entries });
+    const service = getProviderService(req.session.userId);
+    const parent = normalizeRef(req.query.parent);
+    const entries = await service.listFolder(req.session.userId, parent);
+    res.json({ parent, entries });
   } catch (err) {
     handleError(err, res);
   }
@@ -78,10 +101,10 @@ filesRouter.get('/', async (req, res) => {
 
 filesRouter.post('/folders', async (req, res) => {
   try {
-    const path = normalizePath(req.body?.path);
+    const service = getProviderService(req.session.userId);
+    const parent = normalizeRef(req.body?.parent);
     const name = validateFolderName(req.body?.name);
-    const newPath = path === '' ? `/${name}` : `${path}/${name}`;
-    const folder = await dropboxService.createFolder(req.session.userId, newPath);
+    const folder = await service.createFolder(req.session.userId, parent, name);
     res.status(201).json({ folder });
   } catch (err) {
     handleError(err, res);
@@ -93,16 +116,16 @@ filesRouter.post('/upload', async (req, res) => {
     await uploadSingleFile(req, res);
     if (!req.file) throw badRequest('No se recibio ningun archivo.');
 
-    const path = normalizePath(req.body?.path);
+    const service = getProviderService(req.session.userId);
+    const parent = normalizeRef(req.body?.parent);
     const name = sanitizeFileName(req.file.originalname);
-    const destPath = path === '' ? `/${name}` : `${path}/${name}`;
 
-    const uploaded = await dropboxService.uploadFile(req.session.userId, destPath, req.file.buffer);
+    const uploaded = await service.uploadFile(req.session.userId, parent, name, req.file.buffer);
 
-    // Chequeo de integridad: el tamano que Dropbox confirma haber guardado
-    // tiene que coincidir exactamente con el tamano del archivo original.
+    // Chequeo de integridad: el tamano que el proveedor confirma haber
+    // guardado tiene que coincidir exactamente con el del archivo original.
     if (uploaded.size !== req.file.size) {
-      await dropboxService.deleteFile(req.session.userId, uploaded.path).catch(() => {});
+      await service.deleteFile(req.session.userId, uploaded.ref).catch(() => {});
       throw Object.assign(
         new Error('La subida se completo pero el tamano no coincidio con el original. Se elimino el archivo, proba de nuevo.'),
         { httpStatus: 502 }
