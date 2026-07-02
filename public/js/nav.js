@@ -1,0 +1,32 @@
+import { apiFetch } from './api.js';
+
+const PROVIDER_LABELS = { dropbox: 'Dropbox', google_drive: 'Google Drive', s3: 'Amazon S3' };
+
+export function highlightActiveNavLink() {
+  const path = window.location.pathname;
+  document.querySelectorAll('.nav-links a').forEach((link) => {
+    link.classList.toggle('active', new URL(link.href).pathname === path);
+  });
+}
+
+export async function renderProviderBadge() {
+  const badge = document.getElementById('provider-badge');
+  if (!badge) return;
+  try {
+    const { connections } = await apiFetch('/api/connections');
+    const active = connections.find((c) => c.is_active);
+    if (active) {
+      badge.textContent = `☁ ${PROVIDER_LABELS[active.provider] || active.provider}`;
+      badge.style.display = 'inline-flex';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch {
+    badge.style.display = 'none';
+  }
+}
+
+export function initTopbar() {
+  highlightActiveNavLink();
+  renderProviderBadge();
+}

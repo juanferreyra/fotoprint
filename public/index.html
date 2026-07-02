@@ -4,22 +4,32 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>fotoprint</title>
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
   <div class="topbar">
-    <div class="brand">fotoprint</div>
-    <div>
+    <a class="brand" href="/index.html">
+      <img src="/img/logo.svg" alt="" width="28" height="28" />
+      <span class="brand-word">foto<span class="accent">print</span></span>
+    </a>
+    <nav class="nav-links">
+      <a href="/index.html">Explorador</a>
+      <a href="/connect.html">Conectar almacenamiento</a>
+    </nav>
+    <div class="topbar-right">
+      <a id="provider-badge" class="provider-badge" href="/connect.html"></a>
       <span class="user-email" id="user-email"></span>
       <button class="link-button" id="logout-btn">Cerrar sesion</button>
     </div>
   </div>
 
   <main class="container container-wide">
-    <div id="no-connection" style="display:none">
-      <h2>Almacenamiento en la nube</h2>
-      <p>Todavia no conectaste ninguna cuenta de almacenamiento.</p>
-      <p><a href="/connect.html">Conectar almacenamiento</a></p>
+    <div id="no-connection" class="hero-empty" style="display:none">
+      <img src="/img/logo.svg" alt="" width="48" height="48" />
+      <h2>Conectá tu almacenamiento</h2>
+      <p>Todavía no conectaste ninguna cuenta de almacenamiento en la nube.</p>
+      <a class="btn-primary-sm" href="/connect.html">Conectar almacenamiento</a>
     </div>
 
     <div id="explorer" style="display:none">

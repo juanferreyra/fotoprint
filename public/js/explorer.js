@@ -1,4 +1,5 @@
 import { apiFetch } from './api.js';
+import { initTopbar } from './nav.js';
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff', 'tif', 'svg']);
 
@@ -327,6 +328,7 @@ async function init() {
     window.location.href = '/login.html';
     return;
   }
+  initTopbar();
   await loadConnectionStatus();
 }
 
