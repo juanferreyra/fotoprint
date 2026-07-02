@@ -7,6 +7,13 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      # Fijamos la version de Node explicitamente: better-sqlite3 tiene
+      # codigo nativo (C++) y solo trae binarios precompilados para
+      # versiones de Node ya establecidas. Con una version "current" muy
+      # nueva (sin binario precompilado todavia) Render intenta compilarlo
+      # desde cero con node-gyp y falla.
+      - key: NODE_VERSION
+        value: 22.22.2
       - key: DATABASE_FILE
         value: ./data/fotoprint.sqlite
       - key: SESSION_SECRET

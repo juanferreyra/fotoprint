@@ -102,3 +102,18 @@ desde **Settings → Custom Domains** del servicio (te da un CNAME/registro
 para configurar en tu DNS). Si terminás usando ese dominio en vez del
 `.onrender.com`, actualizá `BASE_URL` y los redirect URIs de Dropbox/Google
 otra vez para que apunten al dominio nuevo.
+
+## Troubleshooting
+
+### Build failed: `better-sqlite3` / `node-gyp` / `make: *** Error 1`
+
+Render eligió una versión de Node muy nueva (ej. v26.x) que todavía no
+tiene un binario precompilado para `better-sqlite3` (tiene código nativo en
+C++), así que intenta compilarlo desde cero y falla. Ya está resuelto en
+el repo (`render.yaml` fija `NODE_VERSION=22.22.2` y `package.json` fija
+`engines.node: "22.x"`) — si te vuelve a pasar, confirmá en el dashboard de
+Render, **Environment**, que `NODE_VERSION` esté en `22.22.2` (si el
+servicio ya existía antes de este fix, puede que tengas que agregarlo a
+mano ahí, ya que Render no siempre re-sincroniza `render.yaml` solo en
+servicios ya creados — hay un botón **Manual Sync** en la sección
+**Settings → Blueprint** para forzarlo).
