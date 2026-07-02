@@ -10,7 +10,10 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS cloud_connections (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider TEXT NOT NULL CHECK (provider IN ('dropbox', 'google_drive', 's3')),
+  -- La lista de proveedores validos se valida en la capa de aplicacion
+  -- (routes/connections.js, routes/files.js), no con un CHECK aca, para no
+  -- tener que migrar la tabla cada vez que se agrega un proveedor nuevo.
+  provider TEXT NOT NULL,
   account_label TEXT,
   encrypted_credentials TEXT NOT NULL,
   is_active INTEGER NOT NULL DEFAULT 0,
