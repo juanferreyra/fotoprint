@@ -5,6 +5,7 @@ import { getActiveConnection } from '../services/connections.js';
 import * as dropboxService from '../services/dropbox.js';
 import * as googleDriveService from '../services/googleDrive.js';
 import * as s3Service from '../services/s3.js';
+import * as ftpService from '../services/ftp.js';
 
 export const filesRouter = Router();
 
@@ -21,6 +22,7 @@ const PROVIDER_SERVICES = {
   dropbox: dropboxService,
   google_drive: googleDriveService,
   s3: s3Service,
+  ftp: ftpService,
 };
 
 // Limite de subida en un solo request (coincide con el limite de Dropbox

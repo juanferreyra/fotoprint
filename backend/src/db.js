@@ -11,4 +11,26 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 const schemaPath = path.resolve(fileURLToPath(import.meta.url), '..', 'db', 'schema.sql');
-db.exec(fs.readFileSync(schemaPath, 'utf8'));
+const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+db.exec(schemaSql);
+
+// Migracion para bases creadas antes de quitar el CHECK(provider IN (...))
+// de cloud_connections (SQLite no soporta ALTER de un CHECK existente, hay
+// que recrear la tabla).
+function migrateDropProviderCheckConstraint() {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'cloud_connections'").get();
+  if (!row || !row.sql.includes('CHECK')) return;
+
+  db.transaction(() => {
+    db.exec('ALTER TABLE cloud_connections RENAME TO cloud_connections_old');
+    db.exec(schemaSql);
+    db.exec(`
+      INSERT INTO cloud_connections (id, user_id, provider, account_label, encrypted_credentials, is_active, created_at, updated_at)
+      SELECT id, user_id, provider, account_label, encrypted_credentials, is_active, created_at, updated_at
+      FROM cloud_connections_old
+    `);
+    db.exec('DROP TABLE cloud_connections_old');
+  })();
+}
+
+migrateDropProviderCheckConstraint();

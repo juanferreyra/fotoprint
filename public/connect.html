@@ -38,7 +38,7 @@
       display: flex;
       gap: 8px;
     }
-    .s3-form {
+    .credentials-form {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -47,18 +47,34 @@
       margin-top: 4px;
       max-width: 420px;
     }
-    .s3-form h3 {
+    .credentials-form h3 {
       margin: 0 0 4px;
       font-size: 1.05rem;
     }
-    .s3-form .subtitle {
+    .credentials-form .subtitle {
       color: var(--muted);
       font-size: 0.85rem;
       margin: 0 0 16px;
     }
-    .s3-form-actions {
+    .credentials-form-actions {
       display: flex;
       gap: 8px;
+    }
+    .credentials-form + .credentials-form {
+      margin-top: 12px;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--text);
+      margin-bottom: 16px;
+      cursor: pointer;
+    }
+    .checkbox-label input {
+      margin: 0;
+      width: auto;
     }
   </style>
 </head>
@@ -88,7 +104,7 @@
 
     <div class="provider-list" id="provider-list"></div>
 
-    <form class="s3-form" id="s3-form" style="display:none">
+    <form class="credentials-form" id="s3-form" style="display:none">
       <h3>Conectar Amazon S3</h3>
       <p class="subtitle">Necesitas un usuario IAM con permisos sobre un bucket especifico (ver README).</p>
 
@@ -104,9 +120,36 @@
       <label for="s3-region">Region</label>
       <input type="text" id="s3-region" placeholder="us-east-1" required />
 
-      <div class="s3-form-actions">
+      <div class="credentials-form-actions">
         <button type="submit" class="btn-primary-sm" id="s3-submit-btn">Conectar</button>
         <button type="button" class="btn-secondary" id="s3-cancel">Cancelar</button>
+      </div>
+    </form>
+
+    <form class="credentials-form" id="ftp-form" style="display:none">
+      <h3>Conectar FTP</h3>
+      <p class="subtitle">El usuario y carpeta que uses tienen que tener permiso de lectura y escritura.</p>
+
+      <label for="ftp-host">Host</label>
+      <input type="text" id="ftp-host" placeholder="ftp.tudominio.com" required />
+
+      <label for="ftp-port">Puerto</label>
+      <input type="text" id="ftp-port" placeholder="21" value="21" />
+
+      <label for="ftp-user">Usuario</label>
+      <input type="text" id="ftp-user" autocomplete="off" required />
+
+      <label for="ftp-password">Contrasena</label>
+      <input type="password" id="ftp-password" autocomplete="off" required />
+
+      <label class="checkbox-label">
+        <input type="checkbox" id="ftp-secure" />
+        Usar FTPS (recomendado si tu hosting lo soporta)
+      </label>
+
+      <div class="credentials-form-actions">
+        <button type="submit" class="btn-primary-sm" id="ftp-submit-btn">Conectar</button>
+        <button type="button" class="btn-secondary" id="ftp-cancel">Cancelar</button>
       </div>
     </form>
   </main>
@@ -119,6 +162,7 @@
       dropbox: 'Dropbox',
       google_drive: 'Google Drive',
       s3: 'Amazon S3',
+      ftp: 'FTP',
     };
 
     const listEl = document.getElementById('provider-list');
@@ -127,6 +171,18 @@
     const providerBadge = document.getElementById('provider-badge');
     const s3Form = document.getElementById('s3-form');
     const s3SubmitBtn = document.getElementById('s3-submit-btn');
+    const ftpForm = document.getElementById('ftp-form');
+    const ftpSubmitBtn = document.getElementById('ftp-submit-btn');
+
+    function toggleForm(formToShow) {
+      const wasOpen = formToShow.style.display === 'block';
+      s3Form.style.display = 'none';
+      ftpForm.style.display = 'none';
+      if (!wasOpen) {
+        formToShow.style.display = 'block';
+        formToShow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
 
     function updateProviderBadge(connections) {
       const active = connections.find((c) => c.is_active);
@@ -148,7 +204,7 @@
       const byProvider = Object.fromEntries(connections.map((c) => [c.provider, c]));
       listEl.innerHTML = '';
 
-      for (const provider of ['dropbox', 'google_drive', 's3']) {
+      for (const provider of ['dropbox', 'google_drive', 's3', 'ftp']) {
         const conn = byProvider[provider];
         const card = document.createElement('div');
         card.className = 'provider-card';
@@ -182,17 +238,12 @@
             link.className = 'btn-primary-sm';
             link.textContent = 'Conectar';
             actions.appendChild(link);
-          } else if (provider === 's3') {
+          } else if (provider === 's3' || provider === 'ftp') {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'btn-primary-sm';
             btn.textContent = 'Conectar';
-            btn.addEventListener('click', () => {
-              s3Form.style.display = s3Form.style.display === 'none' ? 'block' : 'none';
-              if (s3Form.style.display === 'block') {
-                s3Form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              }
-            });
+            btn.addEventListener('click', () => toggleForm(provider === 's3' ? s3Form : ftpForm));
             actions.appendChild(btn);
           }
         } else {
@@ -267,6 +318,39 @@
       } finally {
         s3SubmitBtn.disabled = false;
         s3SubmitBtn.textContent = 'Conectar';
+      }
+    });
+
+    document.getElementById('ftp-cancel').addEventListener('click', () => {
+      ftpForm.style.display = 'none';
+    });
+
+    ftpForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      errorBox.classList.remove('visible');
+      ftpSubmitBtn.disabled = true;
+      ftpSubmitBtn.textContent = 'Probando credenciales...';
+
+      try {
+        const body = {
+          host: document.getElementById('ftp-host').value,
+          port: document.getElementById('ftp-port').value,
+          user: document.getElementById('ftp-user').value,
+          password: document.getElementById('ftp-password').value,
+          secure: document.getElementById('ftp-secure').checked,
+        };
+        const { connections } = await apiFetch('/api/connections/ftp', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+        ftpForm.reset();
+        ftpForm.style.display = 'none';
+        render(connections);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        ftpSubmitBtn.disabled = false;
+        ftpSubmitBtn.textContent = 'Conectar';
       }
     });
 

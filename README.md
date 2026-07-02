@@ -1,8 +1,9 @@
 # fotoprint
 
 Aplicación web liviana para subir y explorar imágenes en la nube del propio usuario
-(Google Drive, Dropbox o Amazon S3), sin almacenamiento permanente en el servidor
-y sin recomprimir ni recodificar las imágenes en ningún punto del flujo.
+(Google Drive, Dropbox, Amazon S3 o un servidor FTP propio), sin almacenamiento
+permanente en el servidor y sin recomprimir ni recodificar las imágenes en ningún
+punto del flujo.
 
 ## Estado actual
 
@@ -15,6 +16,9 @@ y sin recomprimir ni recodificar las imágenes en ningún punto del flujo.
 - [x] Amazon S3 — scaffold completo (formulario de credenciales, listar,
       crear carpeta, subir con integridad), sin probar contra un bucket
       real (ver sección [Amazon S3](#conexión-con-amazon-s3-sin-oauth))
+- [x] FTP — scaffold completo (formulario de credenciales, listar, crear
+      carpeta, subir con integridad), sin poder probar ninguna conexión
+      real (ver sección [FTP](#conexión-con-ftp-sin-oauth))
 - [x] Configuración lista para desplegar en Render.com (ver [DEPLOY.md](./DEPLOY.md))
 
 ## Arquitectura
@@ -40,6 +44,7 @@ fotoprint/
                              # mapeo de errores del SDK a mensajes legibles
       services/googleDrive.js # OAuth2 (googleapis), Drive API v3, misma interfaz que dropbox.js
       services/s3.js         # @aws-sdk/client-s3, misma interfaz, sin OAuth (credenciales de larga duracion)
+      services/ftp.js        # basic-ftp, misma interfaz, sin cachear conexion (una nueva por operacion)
     data/                    # SQLite en disco (gitignored)
     .env.example
   public/                    # frontend estático, vanilla JS (sin build step)
@@ -72,18 +77,21 @@ fotoprint/
   RAM, nunca se escribe a disco) y se van a mandar tal cual al SDK del
   proveedor. No hay ninguna librería de procesamiento de imágenes (sharp, jimp,
   canvas) en el proyecto.
-- **Multi-proveedor (Dropbox / Google Drive / S3)**: `routes/files.js` no sabe
-  nada de Dropbox ni de Drive puntualmente — despacha según
+- **Multi-proveedor (Dropbox / Google Drive / S3 / FTP)**: `routes/files.js`
+  no sabe nada de ningún proveedor puntual — despacha según
   `connection.provider` a un módulo de `services/` que implementa siempre la
   misma interfaz (`listFolder`, `createFolder`, `uploadFile`, `deleteFile`).
   La API HTTP usa un `ref` opaco por proveedor en vez de un path real: para
-  Dropbox el `ref` es literalmente el path (`/Fotos/Playa`), para Drive es el
-  `id` del archivo/carpeta (Drive no tiene paths reales — un mismo nombre de
-  carpeta puede repetirse, así que solo el `id` identifica un recurso sin
-  ambigüedad), y para S3 es la key/prefix del objeto (S3 tampoco tiene
-  carpetas reales — se simulan con objetos vacíos cuya key termina en `/`,
-  y se listan con `Delimiter: '/'` para separar "carpetas" de "archivos").
-  La raíz siempre es `ref = ''`.
+  Dropbox y FTP el `ref` es literalmente el path (`/Fotos/Playa`, ambos
+  tienen carpetas reales), para Drive es el `id` del archivo/carpeta (Drive
+  no tiene paths reales — un mismo nombre de carpeta puede repetirse, así
+  que solo el `id` identifica un recurso sin ambigüedad), y para S3 es la
+  key/prefix del objeto (S3 tampoco tiene carpetas reales — se simulan con
+  objetos vacíos cuya key termina en `/`, y se listan con `Delimiter: '/'`
+  para separar "carpetas" de "archivos"). La raíz siempre es `ref = ''`.
+  La columna `cloud_connections.provider` no tiene un `CHECK` con la lista
+  de proveedores válidos (se validan en la capa de aplicación) — así,
+  agregar un proveedor nuevo no necesita una migración de base de datos.
   El frontend (`js/explorer.js`) tampoco parsea el `ref` como un path: arma
   el breadcrumb como una pila `{ref, name}` en el cliente a medida que el
   usuario entra/sale de carpetas, lo que funciona igual sin importar si el
@@ -391,11 +399,102 @@ real, crear una carpeta, subir una imagen) porque no tengo — ni vos todavía
 tenés — un bucket con credenciales válidas. Cuando tengas uno, probalo con
 los pasos de arriba y contame si algo no anda como esperás.
 
+## Conexión con FTP (sin OAuth)
+
+Mismo patrón que S3 (formulario de credenciales, sin OAuth), con
+`services/ftp.js` (usa `basic-ftp`).
+
+- `POST /api/connections/ftp` (`{ host, port, user, password, secure }`):
+  antes de guardar, prueba las credenciales conectándose de verdad al
+  servidor y listando la raíz — si falla, no se guarda nada. `port` es
+  opcional (default `21`). `secure` activa FTPS (TLS explícito).
+- **Diferencia clave con Dropbox/Drive/S3**: acá **no se cachea ninguna
+  conexión** entre requests. Los otros proveedores guardan un token/cliente
+  en memoria para reusar en el próximo pedido, pero FTP es un protocolo con
+  estado (conexión + sesión de login persistente), y muchos hostings
+  compartidos limitan la cantidad de conexiones FTP simultáneas — abrir una
+  conexión nueva por operación y cerrarla enseguida es más simple y más
+  robusto. Como efecto secundario, esto también evita el bug de caché
+  desactualizada que hubo que arreglar para los otros tres proveedores (acá
+  ni siquiera puede pasar).
+- Se agregó un **timeout de 15 segundos** (`new Client(15000)` de
+  `basic-ftp`) a toda conexión: si el host no responde (caído, mal
+  escrito, firewall de por medio), el pedido falla con un mensaje claro en
+  vez de quedar colgado indefinidamente.
+- **"Carpetas" en FTP**: a diferencia de S3/Drive, FTP sí tiene carpetas
+  reales (como Dropbox), así que el `ref` es directamente el path completo
+  (ej. `/Vacaciones/2025`), y la raíz es `''` (se traduce a `/` al hablar
+  con el servidor).
+- El chequeo de integridad de la subida usa el comando `SIZE` (`client.size(ref)`)
+  después de subir, porque el comando de subida en sí no devuelve el
+  tamaño guardado.
+- **Cambio de arquitectura de la base de datos**: la columna
+  `cloud_connections.provider` tenía un `CHECK (provider IN ('dropbox',
+  'google_drive', 's3'))` hardcodeado — agregar FTP hubiese necesitado
+  modificar ese `CHECK`, y SQLite no permite alterar un `CHECK` existente
+  sin recrear la tabla. Se sacó el `CHECK` (la validación de qué
+  proveedores son válidos ya vive en la capa de aplicación, en
+  `routes/connections.js` y `routes/files.js`, que es donde tiene que
+  estar de cualquier forma) para no tener que repetir esta migración cada
+  vez que se agregue un proveedor nuevo. `db.js` migra solo, al arrancar,
+  cualquier base de datos existente que todavía tenga el `CHECK` viejo
+  (recrea la tabla y copia los datos, sin perder nada).
+- Frontend: mismo patrón de formulario inline que S3 en `/connect.html`,
+  con un checkbox para FTPS. Abrir el formulario de un proveedor cierra el
+  del otro si estaba abierto (mutuamente excluyentes).
+
+### Cómo probarlo
+
+1. `cd backend && npm run dev`
+2. Logueado, andá a `http://localhost:3000/connect.html`
+3. Click en **Conectar** (FTP), completá host/puerto/usuario/contraseña
+   (y marcá FTPS si tu hosting lo soporta)
+4. Si las credenciales son válidas vas a ver la card en estado "Activo"
+   inmediatamente
+5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador
+   de archivos apuntando a la raíz de tu cuenta FTP
+
+**Nota sobre las pruebas de este paso**: este es el caso más limitado de
+los cuatro. Este sandbox **no tiene salida de red para FTP en absoluto**
+(ni siquiera hacia un servidor de test público como `test.rebex.net` — el
+intento de conexión se queda colgado sin ninguna respuesta, a diferencia
+de Dropbox/Google que al menos devuelven un 403 explícito, o S3 que
+funciona completo). No pude probar ni un solo intento de conexión real.
+Sí probé:
+- Validaciones de campos faltantes y puerto inválido (400).
+- El mecanismo de timeout: con un host real pero inalcanzable desde acá
+  (`test.rebex.net`), la conexión falla prolijamente a los 15 segundos con
+  el mensaje "Tiempo de espera agotado..." en vez de colgar el pedido para
+  siempre — esto confirma que el timeout configurado en `basic-ftp`
+  funciona y que el mapeo de ese error especifico a un mensaje legible
+  anda bien, aunque no haya podido probar una conexión exitosa.
+- El despacho genérico: con una conexión FTP guardada (credenciales
+  inventadas), `GET /api/files` llega hasta `services/ftp.js` y falla con
+  el mismo timeout prolijo — confirma que el wiring en `routes/files.js`
+  está bien.
+- La migración de la base: corrí la migración contra mi base de datos
+  local (que ya tenía conexiones de Dropbox/Drive/S3 de pruebas
+  anteriores, guardadas con el `CHECK` viejo) y confirmé que se preservan
+  todas las filas existentes.
+- El formulario completo en el navegador con Playwright: abrir/cancelar,
+  exclusión mutua con el formulario de S3, envío mostrando el error de
+  timeout y dejando el formulario abierto para corregir.
+
+Esta es la parte que más necesito que pruebes vos cuando tengas acceso FTP
+a algún hosting (o incluso a un servidor FTP casero para probar) — es la
+única de las cuatro integraciones donde no pude confirmar ni un solo
+intento de conexión real contra un servidor de verdad.
+
 ## Estado del proyecto
 
-Con esto quedan andando los tres proveedores previstos (Dropbox y Google
-Drive probados de punta a punta por vos; S3 con el scaffold completo listo
-para cuando tengas un bucket). El flujo end-to-end completo — registro,
-conectar almacenamiento, navegar/crear carpetas, subir imágenes sin
-compresión con chequeo de integridad — funciona igual sin importar cuál de
-los tres esté activo.
+Con esto quedan cuatro proveedores andando (Dropbox y Google Drive
+probados de punta a punta por vos; S3 y FTP con el scaffold completo listo
+para cuando tengan credenciales/bucket/servidor reales para probar). El
+flujo end-to-end completo — registro, conectar almacenamiento,
+navegar/crear carpetas, subir imágenes sin compresión con chequeo de
+integridad — funciona igual sin importar cuál de los cuatro esté activo,
+gracias al despacho genérico en `routes/files.js` y a que los cuatro
+`services/*.js` implementan la misma interfaz.
+
+Además, la configuración para desplegar en Render.com ya está lista (ver
+[DEPLOY.md](./DEPLOY.md)).

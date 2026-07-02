@@ -11,10 +11,11 @@ import {
 import * as dropbox from '../services/dropbox.js';
 import * as googleDrive from '../services/googleDrive.js';
 import * as s3 from '../services/s3.js';
+import * as ftp from '../services/ftp.js';
 
 export const connectionsRouter = Router();
 
-const PROVIDERS = new Set(['dropbox', 'google_drive', 's3']);
+const PROVIDERS = new Set(['dropbox', 'google_drive', 's3', 'ftp']);
 
 connectionsRouter.use(requireAuth);
 
@@ -169,6 +170,44 @@ connectionsRouter.post('/s3', async (req, res) => {
   const existing = getConnection(req.session.userId, 's3');
   saveConnection(req.session.userId, 's3', `${credentials.bucket} (${credentials.region})`, credentials);
   if (existing) s3.invalidateCache(existing.id);
+
+  res.status(201).json({ connections: listConnections(req.session.userId) });
+});
+
+// --- FTP (formulario de credenciales, sin OAuth) ---
+
+connectionsRouter.post('/ftp', async (req, res) => {
+  const { host, user, password } = req.body || {};
+  const port = req.body?.port === undefined || req.body?.port === '' ? 21 : Number(req.body.port);
+  const secure = Boolean(req.body?.secure);
+
+  const requiredFields = { host, user, password };
+  const missing = Object.entries(requiredFields).filter(([, value]) => typeof value !== 'string' || !value.trim());
+
+  if (missing.length > 0 || !Number.isInteger(port) || port < 1 || port > 65535) {
+    return res.status(400).json({ error: 'Host, usuario, contrasena y un puerto valido son requeridos.' });
+  }
+
+  const credentials = {
+    host: host.trim(),
+    port,
+    user: user.trim(),
+    password,
+    secure,
+  };
+
+  try {
+    // Probamos las credenciales contra el servidor real antes de guardar,
+    // para no dejar guardada una conexion rota por un typo.
+    await ftp.testCredentials(credentials);
+  } catch (err) {
+    return res.status(err.httpStatus || 502).json({ error: err.message });
+  }
+
+  // FTP no cachea ningun cliente por conexion (services/ftp.js abre una
+  // conexion nueva en cada operacion), asi que reconectar con credenciales
+  // distintas no deja nada desactualizado para invalidar.
+  saveConnection(req.session.userId, 'ftp', `${credentials.user}@${credentials.host}`, credentials);
 
   res.status(201).json({ connections: listConnections(req.session.userId) });
 });
