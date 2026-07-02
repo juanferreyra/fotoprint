@@ -200,6 +200,76 @@ main.container-wide {
   width: 220px;
 }
 
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 16px 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.upload-zone.drag-over {
+  border-color: var(--accent);
+  background: #eef4ff;
+}
+
+.upload-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.upload-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+
+.upload-item-name {
+  flex: 0 0 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-item-bar {
+  flex: 1;
+  height: 6px;
+  background: #eee;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.upload-item-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+.upload-item-status {
+  flex: 0 0 90px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.upload-item.is-error .upload-item-status {
+  color: var(--error);
+}
+
+.upload-item.is-error .upload-item-bar-fill {
+  background: var(--error);
+}
+
+.upload-item.is-done .upload-item-status {
+  color: #1e7e34;
+}
+
 .entry-list {
   border: 1px solid var(--border);
   border-radius: var(--radius);

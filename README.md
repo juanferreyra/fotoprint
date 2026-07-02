@@ -10,7 +10,7 @@ y sin recomprimir ni recodificar las imágenes en ningún punto del flujo.
 - [x] Registro / login / logout con sesiones (cookie httpOnly + SQLite)
 - [x] Conexión OAuth con Dropbox
 - [x] Navegador de archivos (Dropbox)
-- [ ] Subida de imágenes sin compresión + chequeo de integridad (Dropbox)
+- [x] Subida de imágenes sin compresión + chequeo de integridad (Dropbox)
 - [ ] Google Drive
 - [ ] Amazon S3
 
@@ -165,7 +165,64 @@ carpetas/archivos reales de tu Dropbox. Contame si ves algo raro (por
 ejemplo, carpetas con muchísimos archivos, nombres con caracteres
 especiales, etc.).
 
+## Subida de imágenes (Dropbox)
+
+- `POST /api/files/upload` (`multipart/form-data`, campos `path` y `file`):
+  recibe el archivo con `multer` en memoria (`memoryStorage`, nunca se
+  escribe a disco) y manda el buffer tal cual al SDK de Dropbox
+  (`filesUpload`) — no hay ninguna libreria de procesamiento de imagenes en
+  el pipeline, el binario que llega a Dropbox es identico al que subio el
+  usuario.
+- **Chequeo de integridad**: despues de subir, se compara el `size` que
+  Dropbox confirma haber guardado contra `req.file.size` (tamaño exacto del
+  buffer recibido). Si no coinciden, se borra el archivo recien subido
+  (`filesDeleteV2`) y se devuelve un error 502 pidiendo reintentar — nunca
+  se deja un archivo "creido subido" pero corrupto en la nube del usuario.
+- Limite de 150MB por archivo (limite de Dropbox para `filesUpload` en un
+  solo request; archivos mas grandes necesitarian "upload sessions"
+  chunkeadas, que quedan fuera de alcance de este paso). Se devuelve 413 con
+  mensaje claro si se supera.
+- `autorename: true` evita pisar un archivo existente con el mismo nombre
+  (Dropbox le agrega automaticamente un sufijo tipo `foto (1).jpg`).
+- Frontend: zona de **drag & drop** sobre el explorador + selector de
+  archivo (`accept="image/*"` como filtro, no como restriccion dura), cola
+  de subida con barra de progreso real por archivo (via
+  `XMLHttpRequest.upload.onprogress`, ya que `fetch` no expone progreso de
+  subida), y mensaje de error visible por archivo si algo falla (token
+  vencido, archivo muy grande, etc.). Al terminar, la carpeta se recarga
+  para mostrar el archivo nuevo.
+
+**Nota sobre las pruebas de este paso**: igual que con el navegador de
+archivos, este sandbox no tiene salida de red hacia `api.dropboxapi.com`,
+asi que no pude subir un archivo real a Dropbox desde aca. Sí probé:
+- Validaciones (sin archivo, sin conexion activa, sin autenticacion,
+  archivo de 150MB+ devolviendo 413) con curl contra el servidor real.
+- El manejo de errores end-to-end contra la Dropbox API real (con un
+  `refresh_token` invalido) para confirmar que la subida falla con un
+  mensaje claro (502) en vez de romperse.
+- El flujo completo del frontend con Playwright, interceptando la red:
+  drag-over visual, subida via el selector de archivo con los campos
+  correctos en el `multipart/form-data`, barra de progreso llegando a
+  "Listo" y desapareciendo, recarga de la carpeta mostrando el archivo
+  subido, y el caso de error (token vencido) mostrando el mensaje en rojo
+  sin autoeliminarse.
+
+Para probarlo en tu maquina con tu Dropbox real: `cd backend && npm run dev`,
+entra a `http://localhost:3000/index.html`, y arrastra una imagen (o
+varias) a la zona de subida. Fijate que:
+1. La barra de progreso avance.
+2. El archivo aparezca en la carpeta actual al terminar.
+3. El tamaño en Dropbox coincida con el archivo original (podes compararlo
+   a ojo, o confiar en que si no coincidiera el sistema lo habria borrado y
+   mostrado un error).
+
+Con esto queda cerrado el flujo completo end-to-end para Dropbox: login →
+conectar cuenta → navegar carpetas → crear carpetas → subir imagenes sin
+compresion con chequeo de integridad.
+
 ## Próximo paso
 
-Subida de imágenes a Dropbox sin compresión ni recodificación, con chequeo
-de integridad de tamaño de archivo y barra de progreso.
+Sumar Google Drive y Amazon S3 siguiendo el mismo patron: cada uno con su
+propio modulo en `services/`, reutilizando `routes/connections.js` y
+`routes/files.js` (que hoy asumen Dropbox como unico proveedor activo, va a
+haber que generalizarlos para despachar segun `connection.provider`).

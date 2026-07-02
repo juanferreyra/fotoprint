@@ -14,6 +14,10 @@ const els = {
   newFolderForm: document.getElementById('new-folder-form'),
   newFolderName: document.getElementById('new-folder-name'),
   newFolderCancel: document.getElementById('new-folder-cancel'),
+  uploadZone: document.getElementById('upload-zone'),
+  uploadInput: document.getElementById('upload-input'),
+  uploadSelectBtn: document.getElementById('upload-select-btn'),
+  uploadQueue: document.getElementById('upload-queue'),
 };
 
 function showError(message) {
@@ -163,6 +167,116 @@ els.newFolderForm.addEventListener('submit', async (event) => {
   } catch (err) {
     showError(err.message);
   }
+});
+
+// Sube con XMLHttpRequest (en vez de fetch) para poder mostrar progreso real
+// de subida via xhr.upload.onprogress.
+function uploadFileXHR(file, path, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('path', path);
+    formData.append('file', file, file.name);
+
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) onProgress(event.loaded / event.total);
+    });
+
+    xhr.addEventListener('load', () => {
+      let data = null;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        data = null;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error((data && data.error) || `Error ${xhr.status}`));
+      }
+    });
+
+    xhr.addEventListener('error', () => reject(new Error('Error de red durante la subida.')));
+
+    xhr.open('POST', '/api/files/upload');
+    xhr.withCredentials = true;
+    xhr.send(formData);
+  });
+}
+
+function createUploadQueueItem(name) {
+  const row = document.createElement('div');
+  row.className = 'upload-item';
+
+  const nameEl = document.createElement('span');
+  nameEl.className = 'upload-item-name';
+  nameEl.textContent = name;
+  row.appendChild(nameEl);
+
+  const bar = document.createElement('div');
+  bar.className = 'upload-item-bar';
+  const barFill = document.createElement('div');
+  barFill.className = 'upload-item-bar-fill';
+  bar.appendChild(barFill);
+  row.appendChild(bar);
+
+  const status = document.createElement('span');
+  status.className = 'upload-item-status';
+  status.textContent = 'Subiendo...';
+  row.appendChild(status);
+
+  els.uploadQueue.appendChild(row);
+  return { row, barFill, status };
+}
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList);
+  const path = currentPath;
+
+  for (const file of files) {
+    const item = createUploadQueueItem(file.name);
+    try {
+      await uploadFileXHR(file, path, (fraction) => {
+        item.barFill.style.width = `${Math.round(fraction * 100)}%`;
+      });
+      item.barFill.style.width = '100%';
+      item.status.textContent = 'Listo';
+      item.row.classList.add('is-done');
+      setTimeout(() => item.row.remove(), 2500);
+    } catch (err) {
+      item.status.textContent = err.message;
+      item.row.classList.add('is-error');
+    }
+  }
+
+  if (path === currentPath) {
+    await loadFolder(currentPath);
+  }
+}
+
+els.uploadSelectBtn.addEventListener('click', () => els.uploadInput.click());
+
+els.uploadInput.addEventListener('change', () => {
+  if (els.uploadInput.files.length) handleFiles(els.uploadInput.files);
+  els.uploadInput.value = '';
+});
+
+['dragenter', 'dragover'].forEach((eventName) => {
+  els.uploadZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    els.uploadZone.classList.add('drag-over');
+  });
+});
+
+['dragleave', 'drop'].forEach((eventName) => {
+  els.uploadZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    els.uploadZone.classList.remove('drag-over');
+  });
+});
+
+els.uploadZone.addEventListener('drop', (event) => {
+  if (event.dataTransfer?.files?.length) handleFiles(event.dataTransfer.files);
 });
 
 async function loadConnectionStatus() {

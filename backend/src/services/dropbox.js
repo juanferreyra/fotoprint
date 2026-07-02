@@ -102,6 +102,9 @@ function toFriendlyError(err) {
   } else if (summary.includes('disallowed_name') || summary.includes('malformed_path')) {
     message = 'Ese nombre de archivo o carpeta no es valido para Dropbox.';
     httpStatus = 400;
+  } else if (summary.includes('payload_too_large')) {
+    message = 'El archivo supera el limite de 150MB para subida directa.';
+    httpStatus = 413;
   }
 
   const friendly = new Error(message);
@@ -165,5 +168,26 @@ export async function createFolder(userId, folderPath) {
   return withDropboxClient(userId, async (client) => {
     const response = await client.filesCreateFolderV2({ path: folderPath });
     return mapEntry({ '.tag': 'folder', ...response.result.metadata });
+  });
+}
+
+// Sube el buffer tal cual llego del request, sin ningun procesamiento.
+// autorename evita pisar un archivo existente con el mismo nombre.
+export async function uploadFile(userId, filePath, buffer) {
+  return withDropboxClient(userId, async (client) => {
+    const response = await client.filesUpload({
+      path: filePath,
+      contents: buffer,
+      mode: { '.tag': 'add' },
+      autorename: true,
+      mute: false,
+    });
+    return mapEntry({ '.tag': 'file', ...response.result });
+  });
+}
+
+export async function deleteFile(userId, filePath) {
+  return withDropboxClient(userId, async (client) => {
+    await client.filesDeleteV2({ path: filePath });
   });
 }
