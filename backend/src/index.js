@@ -15,6 +15,9 @@ const backendRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..');
 const publicDir = path.resolve(backendRoot, '..', 'public');
 
 app.disable('x-powered-by');
+// Necesario detras de un proxy que termina TLS (Render, nginx, etc.) para
+// que Express calcule bien req.protocol/req.ip.
+app.set('trust proxy', 1);
 app.use(express.json());
 
 app.use(

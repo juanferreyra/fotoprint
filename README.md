@@ -15,6 +15,7 @@ y sin recomprimir ni recodificar las imágenes en ningún punto del flujo.
 - [x] Amazon S3 — scaffold completo (formulario de credenciales, listar,
       crear carpeta, subir con integridad), sin probar contra un bucket
       real (ver sección [Amazon S3](#conexión-con-amazon-s3-sin-oauth))
+- [x] Configuración lista para desplegar en Render.com (ver [DEPLOY.md](./DEPLOY.md))
 
 ## Arquitectura
 
@@ -102,6 +103,11 @@ npm run dev   # o: npm start
 ```
 
 El servidor sirve el frontend estático y la API en `http://localhost:3000`.
+
+Para desplegarlo en producción (probado con Render.com, que soporta un
+servidor Node.js persistente como este a diferencia del hosting compartido
+tradicional tipo DirectAdmin/cPanel pensado para PHP/estático), ver
+[DEPLOY.md](./DEPLOY.md).
 
 ## Conexión con Dropbox (OAuth)
 
