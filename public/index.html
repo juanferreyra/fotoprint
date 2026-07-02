@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>fotoprint</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">fotoprint</div>
+    <div>
+      <span class="user-email" id="user-email"></span>
+      <button class="link-button" id="logout-btn">Cerrar sesion</button>
+    </div>
+  </div>
+
+  <main class="container">
+    <h2>Almacenamiento en la nube</h2>
+    <p>Todavia no conectaste ninguna cuenta de almacenamiento. (Proximo paso: conectar Dropbox.)</p>
+  </main>
+
+  <script type="module">
+    import { apiFetch } from '/js/api.js';
+
+    async function init() {
+      try {
+        const { user } = await apiFetch('/api/auth/me');
+        document.getElementById('user-email').textContent = user.email;
+      } catch {
+        window.location.href = '/login.html';
+      }
+    }
+
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      await apiFetch('/api/auth/logout', { method: 'POST' });
+      window.location.href = '/login.html';
+    });
+
+    init();
+  </script>
+</body>
+</html>
