@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: fotoprint
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_FILE
+        value: ./data/fotoprint.sqlite
+      - key: SESSION_SECRET
+        generateValue: true
+      # Estas hay que completarlas a mano en el dashboard de Render
+      # (Environment → Add Environment Variable). No se pueden generar
+      # solas porque tienen que ser un hex de 64 caracteres exactos, o
+      # vienen de afuera (Dropbox App Console / Google Cloud Console).
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: BASE_URL
+        sync: false
+      - key: DROPBOX_APP_KEY
+        sync: false
+      - key: DROPBOX_APP_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
