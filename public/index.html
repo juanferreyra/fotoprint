@@ -15,44 +15,33 @@
     </div>
   </div>
 
-  <main class="container">
-    <h2>Almacenamiento en la nube</h2>
-    <p id="connection-status">Cargando...</p>
-    <p><a href="/connect.html">Conectar / administrar almacenamiento</a></p>
+  <main class="container container-wide">
+    <div id="no-connection" style="display:none">
+      <h2>Almacenamiento en la nube</h2>
+      <p>Todavia no conectaste ninguna cuenta de almacenamiento.</p>
+      <p><a href="/connect.html">Conectar almacenamiento</a></p>
+    </div>
+
+    <div id="explorer" style="display:none">
+      <div class="explorer-toolbar">
+        <nav class="breadcrumb" id="breadcrumb"></nav>
+        <div>
+          <button class="btn-primary-sm" id="new-folder-btn" type="button">Nueva carpeta</button>
+        </div>
+      </div>
+
+      <form class="new-folder-form" id="new-folder-form" style="display:none">
+        <input type="text" id="new-folder-name" placeholder="Nombre de la carpeta" maxlength="255" required />
+        <button type="submit" class="btn-primary-sm">Crear</button>
+        <button type="button" class="btn-secondary" id="new-folder-cancel">Cancelar</button>
+      </form>
+
+      <div id="error-box" class="error-box"></div>
+
+      <div class="entry-list" id="entry-list"></div>
+    </div>
   </main>
 
-  <script type="module">
-    import { apiFetch } from '/js/api.js';
-
-    async function loadConnectionStatus() {
-      const statusEl = document.getElementById('connection-status');
-      const { connections } = await apiFetch('/api/connections');
-      const active = connections.find((c) => c.is_active);
-      if (active) {
-        const labels = { dropbox: 'Dropbox', google_drive: 'Google Drive', s3: 'Amazon S3' };
-        statusEl.textContent = `Usando ${labels[active.provider] || active.provider} (${active.account_label}). El explorador de archivos llega en el proximo paso.`;
-      } else {
-        statusEl.textContent = 'Todavia no conectaste ninguna cuenta de almacenamiento.';
-      }
-    }
-
-    async function init() {
-      try {
-        const { user } = await apiFetch('/api/auth/me');
-        document.getElementById('user-email').textContent = user.email;
-      } catch {
-        window.location.href = '/login.html';
-        return;
-      }
-      await loadConnectionStatus();
-    }
-
-    document.getElementById('logout-btn').addEventListener('click', async () => {
-      await apiFetch('/api/auth/logout', { method: 'POST' });
-      window.location.href = '/login.html';
-    });
-
-    init();
-  </script>
+  <script type="module" src="/js/explorer.js"></script>
 </body>
 </html>

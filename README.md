@@ -9,7 +9,7 @@ y sin recomprimir ni recodificar las imágenes en ningún punto del flujo.
 - [x] Estructura del proyecto
 - [x] Registro / login / logout con sesiones (cookie httpOnly + SQLite)
 - [x] Conexión OAuth con Dropbox
-- [ ] Navegador de archivos (Dropbox)
+- [x] Navegador de archivos (Dropbox)
 - [ ] Subida de imágenes sin compresión + chequeo de integridad (Dropbox)
 - [ ] Google Drive
 - [ ] Amazon S3
@@ -27,19 +27,22 @@ fotoprint/
       middleware/auth.js    # requireAuth (guard de sesión)
       routes/auth.js        # /api/auth/register, /login, /logout, /me
       routes/connections.js # /api/connections (listar/activar/borrar) + OAuth de Dropbox
+      routes/files.js       # /api/files (listar) y /api/files/folders (crear carpeta)
       services/users.js     # acceso a la tabla users + bcrypt
       services/crypto.js    # cifrado AES-256-GCM de credenciales de nube
       services/connections.js # acceso a la tabla cloud_connections
-      services/dropbox.js   # DropboxAuth, intercambio de code/token, cache de access_token en memoria
+      services/dropbox.js   # DropboxAuth, cache de access_token, listFolder/createFolder,
+                             # mapeo de errores del SDK a mensajes legibles
     data/                    # SQLite en disco (gitignored)
     .env.example
   public/                    # frontend estático, vanilla JS (sin build step)
-    index.html               # dashboard (muestra proveedor activo)
+    index.html               # navegador de archivos (o mensaje "conectar" si no hay proveedor activo)
     connect.html              # pantalla "Conectar almacenamiento"
     login.html
     register.html
     css/style.css
     js/api.js                # helper fetch con manejo de errores
+    js/explorer.js            # logica del navegador de archivos (breadcrumbs, listar, crear carpeta)
 ```
 
 ### Decisiones de arquitectura
@@ -122,8 +125,47 @@ manejo de `state` inválido/vencido, cancelación del usuario, y la UI de
 listar/activar/desconectar conexiones (simulando una conexión guardada
 directamente en la base).
 
+## Navegador de archivos (Dropbox)
+
+- `GET /api/files?path=/Carpeta`: lista carpetas y archivos de esa ruta
+  (`path` vacío o ausente = raíz de Dropbox). Pagina automáticamente con
+  `filesListFolderContinue` hasta 2000 entradas.
+- `POST /api/files/folders` (`{ path, name }`): crea una carpeta dentro de
+  `path`. Valida que `name` no esté vacío, no tenga `/` ni `\`, y no supere
+  255 caracteres.
+- Los errores del SDK de Dropbox (token vencido, carpeta inexistente, nombre
+  duplicado, rate limit, sin espacio) se traducen a mensajes en español con
+  el HTTP status correspondiente en `services/dropbox.js` (`toFriendlyError`).
+  Un 401 de Dropbox invalida el `access_token` cacheado para forzar un
+  refresh en el próximo pedido.
+- Frontend (`index.html` + `js/explorer.js`): breadcrumb clickeable, listado
+  con ícono de carpeta / ícono genérico de imagen (por extensión) / ícono
+  genérico de archivo — sin pedir thumbnails a la API para mantenerlo
+  liviano —, tamaño formateado (B/KB/MB/GB), botón **Nueva carpeta** con
+  formulario inline, y estado vacío cuando la carpeta no tiene contenido.
+  El path actual queda reflejado en la URL (`?path=...`) para poder
+  refrescar sin perder la ubicación.
+
+**Nota sobre las pruebas de este paso**: el entorno donde yo corro no tiene
+salida de red hacia `api.dropboxapi.com` (política de egress del sandbox),
+así que no pude probar una llamada real y exitosa a la API de Dropbox desde
+acá. Sí probé, con curl y Playwright:
+- Validaciones de `path` y `name` (nombres con `/`, vacíos, path traversal).
+- El manejo de errores end-to-end contra la Dropbox API real (con un
+  `refresh_token` inválido) para confirmar que los errores se traducen a
+  JSON legible y no explotan como 500 genérico.
+- El renderizado completo del explorador (breadcrumbs, íconos, tamaños,
+  navegación ida y vuelta, alta de carpeta) simulando las respuestas de
+  `/api/files` con datos de prueba vía interceptación de red en Playwright.
+
+Como vos ya tenés la conexión real funcionando en tu máquina, para probarlo
+de punta a punta: `cd backend && npm run dev`, entrá a
+`http://localhost:3000/index.html` logueado, y deberías ver las
+carpetas/archivos reales de tu Dropbox. Contame si ves algo raro (por
+ejemplo, carpetas con muchísimos archivos, nombres con caracteres
+especiales, etc.).
+
 ## Próximo paso
 
-Navegador de archivos de Dropbox: listar carpetas/archivos, crear carpetas,
-navegar con breadcrumbs, y después la subida de imágenes sin compresión con
-chequeo de integridad de tamaño.
+Subida de imágenes a Dropbox sin compresión ni recodificación, con chequeo
+de integridad de tamaño de archivo y barra de progreso.
