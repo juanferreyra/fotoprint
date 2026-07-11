@@ -21,6 +21,8 @@ las imágenes en ningún punto del flujo.
       funcionando contra un servidor real
 - [x] Carpeta local del proyecto (`media/`) como proveedor sin credenciales —
       probado de punta a punta (ver [Carpeta local del proyecto](#carpeta-local-del-proyecto-sin-credenciales))
+- [x] Descargar archivos desde el explorador (ver [Descargar archivos](#descargar-archivos))
+- [x] Fondos variados en el login/registro (ver [Fondos variados en el login](#fondos-variados-en-el-login))
 - [x] Configuración lista para desplegar en Render.com (ver [DEPLOY.md](./DEPLOY.md))
 
 ## Arquitectura
@@ -36,9 +38,11 @@ fotoprint/
       middleware/auth.js    # requireAuth (guard de sesión)
       routes/auth.js        # /api/auth/register, /login, /logout, /me
       routes/connections.js # /api/connections (listar/activar/borrar) + OAuth de Dropbox y Google Drive
-      routes/files.js       # /api/files, /api/files/folders, /api/files/upload
+      routes/files.js       # /api/files, /api/files/folders, /api/files/upload, /api/files/download
                              # (generico: despacha a services/dropbox.js o services/googleDrive.js
                              # segun cual sea el proveedor activo del usuario)
+      routes/loginBackground.js # /api/login-background (publica, sin auth): elige una foto al azar
+                             # de public/img/login-bg/ para el fondo de login/registro
       services/users.js     # acceso a la tabla users + bcrypt
       services/crypto.js    # cifrado AES-256-GCM de credenciales de nube
       services/connections.js # acceso a la tabla cloud_connections
@@ -60,8 +64,10 @@ fotoprint/
     login.html
     register.html
     css/style.css
+    img/login-bg/             # fotos de fondo para login/registro (opcional, ver mas abajo)
     js/api.js                # helper fetch con manejo de errores
-    js/explorer.js            # logica del navegador de archivos (breadcrumbs, listar, crear carpeta)
+    js/authBg.js               # pide /api/login-background y setea el fondo si hay alguna foto
+    js/explorer.js            # logica del navegador de archivos (breadcrumbs, listar, crear carpeta, descargar)
 ```
 
 ### Decisiones de arquitectura
@@ -70,8 +76,11 @@ fotoprint/
 - **Frontend**: HTML + JS vanilla (ES modules), servido como estático por Express
   desde `public/`. Sin bundler ni framework, para mantener el proyecto liviano.
 - **Autenticación**: sesiones de servidor (`express-session`) con cookie
-  `httpOnly`, `sameSite=lax` y `secure` cuando `BASE_URL` es https. La sesión se
-  persiste en la misma base SQLite (tabla `sessions`, creada automáticamente por
+  `httpOnly`, `sameSite=lax` y `secure: 'auto'` (usa `req.secure` por request,
+  que respeta `trust proxy` + el header `X-Forwarded-Proto` — con un booleano
+  fijo, un proxy que no mande ese header hace que la cookie de sesion
+  directamente no se mande y el login "rebote"). La sesión se persiste en la
+  misma base SQLite (tabla `sessions`, creada automáticamente por
   `better-sqlite3-session-store`). Se eligió por sobre JWT porque frontend y
   backend viven en el mismo origen y evita el riesgo de robo de token vía XSS.
 - **Base de datos**: SQLite vía `better-sqlite3` (síncrono, sin overhead de
@@ -541,6 +550,63 @@ mismo (sin las limitaciones de red que sí afectaron a Dropbox/Drive/FTP):
 crear carpetas anidadas, subir un archivo y confirmar que el chequeo de
 integridad de `routes/files.js` compara bien el tamaño, listar y borrar, y
 que un `ref` con `..` se rechaza con 400 antes de tocar el disco.
+
+## Descargar archivos
+
+Cada archivo listado en el explorador (`home.html`) tiene un botón de
+descarga (⬇) al lado del tamaño.
+
+- `GET /api/files/download?ref=<ref>&name=<name>`: descarga el archivo tal
+  cual esta guardado, sin ningun procesamiento. `ref` es el mismo
+  identificador opaco que ya devuelve `GET /api/files` (path para
+  Dropbox/FTP/local, id para Drive, key para S3); `name` lo manda el
+  frontend (ya lo tiene del listado) y se usa solo para el nombre del
+  archivo descargado, no para ubicarlo.
+- Cada proveedor implementa `downloadFile(userId, ref) -> Buffer`, siguiendo
+  la misma convencion que `uploadFile` (buffer completo en memoria, sin
+  streaming) para mantener los cinco `services/*.js` con la misma forma.
+  Para FTP (que solo permite descargar hacia un stream de escritura, no
+  devuelve un buffer directo) se acumulan los chunks en memoria mientras la
+  conexion sigue abierta, y recien se devuelve el buffer completo. Para S3
+  se usa `response.Body.transformToByteArray()`, y para Drive
+  `alt: 'media'` con `responseType: 'arraybuffer'`.
+- La respuesta siempre se manda con `Content-Type: application/octet-stream`
+  y `Content-Disposition: attachment` (con `filename` + `filename*` RFC 5987
+  para que los nombres con acentos/espacios se guarden bien), asi que el
+  navegador siempre lo baja como archivo en vez de intentar mostrarlo
+  inline, sin importar el tipo real de la imagen.
+- Probado de punta a punta con el proveedor local: subida de un archivo
+  binario de prueba, descarga, y comparacion de checksum MD5 contra el
+  original (coinciden exactamente).
+
+## Fondos variados en el login
+
+Las pantallas de login y registro pueden mostrar una foto de fondo elegida
+al azar en cada carga, poniendo imagenes en `public/img/login-bg/` (ver el
+`README.md` de esa carpeta).
+
+- `GET /api/login-background` (ruta publica, sin `requireAuth` — se usa
+  antes de que exista sesion): lee `public/img/login-bg/`, filtra por
+  extension (`.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`) y devuelve
+  `{ url }` con una elegida al azar, o `{ url: null }` si la carpeta esta
+  vacia o no existe.
+- `public/js/authBg.js` (`initAuthBackground()`, usado por `login.html` y
+  `register.html`): pide esa URL y, si hay alguna, la setea como
+  `background-image` de un `div#login-bg` fijo a pantalla completa, con un
+  velo semitransparente (`rgba(245, 245, 247, 0.55)`) encima para que la
+  tarjeta de login seguir siendo legible sin importar la foto. Si no hay
+  ninguna imagen, no pasa nada y queda el fondo solido de siempre.
+- **Detalle de CSS a tener en cuenta**: `#login-bg` no lleva `z-index`
+  negativo a proposito. El fondo del `<body>` se "promueve" al canvas de la
+  pagina (por no tener `background` seteado en `<html>`), y ese canvas se
+  pinta por debajo de cualquier elemento con z-index negativo — un
+  `z-index: -1` ahi dejaria la foto siempre invisible aunque el
+  `background-image` este bien seteado. Alcanza con que el div quede
+  primero en el DOM (antes de `.page-center`) para pintarse detras sin
+  necesidad de z-index.
+- Probado con Playwright: pantalla en blanco (carpeta vacia) sin romper
+  nada, y con una imagen de prueba cargada se ve de fondo con el velo
+  encima y la tarjeta de login perfectamente legible.
 
 ## Estado del proyecto
 

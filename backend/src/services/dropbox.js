@@ -197,3 +197,12 @@ export async function deleteFile(userId, ref) {
     await client.filesDeleteV2({ path: ref });
   });
 }
+
+// En Node (a diferencia del navegador), el SDK de Dropbox devuelve el
+// contenido descargado como Buffer en result.fileBinary.
+export async function downloadFile(userId, ref) {
+  return withDropboxClient(userId, async (client) => {
+    const response = await client.filesDownload({ path: ref });
+    return response.result.fileBinary;
+  });
+}

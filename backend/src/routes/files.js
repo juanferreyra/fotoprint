@@ -17,6 +17,7 @@ filesRouter.use(requireAuth);
 //   createFolder(userId, parentRef, name) -> { type: 'folder', name, ref }
 //   uploadFile(userId, parentRef, name, buffer) -> { type: 'file', name, ref, size }
 //   deleteFile(userId, ref) -> void
+//   downloadFile(userId, ref) -> Buffer
 // "ref" es opaco por proveedor: para Dropbox es el path, para Drive el id
 // del archivo/carpeta. La raiz siempre es ''.
 const PROVIDER_SERVICES = {
@@ -100,6 +101,28 @@ filesRouter.get('/', async (req, res) => {
     const parent = normalizeRef(req.query.parent);
     const entries = await service.listFolder(req.session.userId, parent);
     res.json({ parent, entries });
+  } catch (err) {
+    handleError(err, res);
+  }
+});
+
+filesRouter.get('/download', async (req, res) => {
+  try {
+    const service = getProviderService(req.session.userId);
+    const ref = normalizeRef(req.query.ref);
+    if (!ref) throw badRequest('Falta indicar que archivo descargar.');
+    const name = sanitizeFileName(req.query.name);
+
+    const buffer = await service.downloadFile(req.session.userId, ref);
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    // filename para navegadores viejos + filename* (RFC 5987) para que los
+    // nombres con acentos/espacios/caracteres no ASCII se guarden bien.
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`
+    );
+    res.send(buffer);
   } catch (err) {
     handleError(err, res);
   }

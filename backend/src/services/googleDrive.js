@@ -202,3 +202,13 @@ export async function deleteFile(userId, ref) {
     await drive.files.delete({ fileId: ref });
   });
 }
+
+export async function downloadFile(userId, ref) {
+  return withDriveClient(userId, async (drive) => {
+    const response = await drive.files.get(
+      { fileId: ref, alt: 'media' },
+      { responseType: 'arraybuffer' }
+    );
+    return Buffer.from(response.data);
+  });
+}

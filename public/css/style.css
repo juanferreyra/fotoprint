@@ -33,6 +33,28 @@ body {
   justify-content: center;
   gap: 24px;
   padding: 24px;
+  position: relative;
+}
+
+/* Foto de fondo al azar (public/img/login-bg/), si hay alguna cargada. Sin
+   background-image seteado (carpeta vacia) queda igual que antes: el
+   fondo solido de --bg del body. Va sin z-index negativo a proposito: el
+   background del <body> se "promueve" al canvas de la pagina y se pinta
+   por debajo de cualquier elemento con z-index negativo, asi que un
+   z-index negativo aca dejaria esta capa siempre invisible. Alcanza con
+   que quede primera en el DOM (antes de .page-center) para pintarse detras.*/
+.login-bg {
+  position: fixed;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+.login-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(245, 245, 247, 0.55);
 }
 
 .auth-brand {
@@ -475,6 +497,23 @@ main.container h2 {
   color: var(--muted);
   font-size: 0.8rem;
   flex-shrink: 0;
+}
+
+.entry-download {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 1rem;
+}
+
+.entry-download:hover {
+  background: var(--accent-soft);
 }
 
 .empty-state {

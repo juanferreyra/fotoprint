@@ -114,6 +114,12 @@ export async function deleteFile(userId, ref) {
   await fs.unlink(filePath);
 }
 
+export async function downloadFile(userId, ref) {
+  ensureActive(userId);
+  const filePath = resolvePath(userId, ref);
+  return fs.readFile(filePath);
+}
+
 // No hay ningun cliente/token cacheado para el proveedor local (no hay
 // conexion con estado, solo el filesystem), asi que no hay nada que
 // invalidar. Se exporta igual para que routes/connections.js pueda tratar

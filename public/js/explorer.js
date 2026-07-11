@@ -115,6 +115,14 @@ function renderEntries(entries) {
       size.className = 'entry-size';
       size.textContent = formatSize(entry.size);
       row.appendChild(size);
+
+      const downloadLink = document.createElement('a');
+      downloadLink.className = 'entry-download';
+      downloadLink.href = `/api/files/download?ref=${encodeURIComponent(entry.ref)}&name=${encodeURIComponent(entry.name)}`;
+      downloadLink.title = 'Descargar';
+      downloadLink.setAttribute('aria-label', `Descargar ${entry.name}`);
+      downloadLink.textContent = '⬇';
+      row.appendChild(downloadLink);
     }
 
     if (entry.type === 'folder') {

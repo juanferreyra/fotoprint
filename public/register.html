@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
+  <div class="login-bg" id="login-bg"></div>
   <div class="page-center">
     <a class="auth-brand" href="/login.html">
       <img src="/img/logo.svg" alt="" width="34" height="34" />
@@ -35,6 +36,9 @@
 
   <script type="module">
     import { apiFetch } from '/js/api.js';
+    import { initAuthBackground } from '/js/authBg.js';
+
+    initAuthBackground();
 
     const form = document.getElementById('register-form');
     const errorBox = document.getElementById('error-box');

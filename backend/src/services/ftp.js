@@ -1,5 +1,5 @@
 import { Client, FileType } from 'basic-ftp';
-import { Readable } from 'node:stream';
+import { Readable, Writable } from 'node:stream';
 import { getActiveConnection } from './connections.js';
 
 // Si el host no responde (caido, firewall, host/puerto mal escrito), no
@@ -140,5 +140,23 @@ export async function uploadFile(userId, parentRef, name, buffer) {
 export async function deleteFile(userId, ref) {
   return withFtpClient(userId, async (client) => {
     await client.remove(ref);
+  });
+}
+
+// basic-ftp solo permite descargar hacia un stream de escritura (no
+// devuelve un buffer directamente), asi que acumulamos los chunks en
+// memoria mientras la conexion FTP sigue abierta y devolvemos el buffer ya
+// completo (misma convencion que los demas proveedores).
+export async function downloadFile(userId, ref) {
+  return withFtpClient(userId, async (client) => {
+    const chunks = [];
+    const collector = new Writable({
+      write(chunk, encoding, callback) {
+        chunks.push(chunk);
+        callback();
+      },
+    });
+    await client.downloadTo(collector, ref);
+    return Buffer.concat(chunks);
   });
 }

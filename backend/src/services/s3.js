@@ -4,6 +4,7 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
   HeadObjectCommand,
+  GetObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getActiveConnection } from './connections.js';
@@ -172,5 +173,13 @@ export async function uploadFile(userId, parentRef, name, buffer) {
 export async function deleteFile(userId, ref) {
   return withS3Client(userId, async (client, connection) => {
     await client.send(new DeleteObjectCommand({ Bucket: connection.credentials.bucket, Key: ref }));
+  });
+}
+
+export async function downloadFile(userId, ref) {
+  return withS3Client(userId, async (client, connection) => {
+    const response = await client.send(new GetObjectCommand({ Bucket: connection.credentials.bucket, Key: ref }));
+    const bytes = await response.Body.transformToByteArray();
+    return Buffer.from(bytes);
   });
 }
