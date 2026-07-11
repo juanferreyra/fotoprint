@@ -1,6 +1,12 @@
 import { apiFetch } from './api.js';
 
-const PROVIDER_LABELS = { dropbox: 'Dropbox', google_drive: 'Google Drive', s3: 'Amazon S3' };
+const PROVIDER_LABELS = {
+  dropbox: 'Dropbox',
+  google_drive: 'Google Drive',
+  s3: 'Amazon S3',
+  ftp: 'FTP',
+  local: 'Carpeta local',
+};
 
 export function highlightActiveNavLink() {
   const path = window.location.pathname;

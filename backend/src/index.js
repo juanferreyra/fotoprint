@@ -33,7 +33,14 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: config.baseUrl.startsWith('https://'),
+      // 'auto' (en vez de un booleano fijo segun config.baseUrl) hace que
+      // express-session decida por request usando req.secure, que a su vez
+      // respeta "trust proxy" + el header X-Forwarded-Proto. Con un booleano
+      // fijo en true, si el proxy no manda ese header (o Express no llega a
+      // verlo como secure por algun motivo puntual), el cookie de sesion
+      // directamente no se manda al navegador y el login queda pisado
+      // (entra, pero la siguiente pagina no ve la sesion y rebota a login).
+      secure: 'auto',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 dias
     },
   })

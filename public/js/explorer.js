@@ -8,6 +8,7 @@ const ROOT_LABELS = {
   google_drive: 'Mi Drive',
   s3: 'Bucket S3',
   ftp: 'Servidor FTP',
+  local: 'Carpeta local',
 };
 
 // "ref" es opaco por proveedor (path para Dropbox, id de archivo para
