@@ -1,4 +1,4 @@
-# fotoprint
+# KodakTienda
 
 Aplicación web liviana para subir y explorar imágenes en la nube del propio usuario
 (Google Drive, Dropbox, Amazon S3 o un servidor FTP propio) o en una carpeta local
@@ -52,7 +52,10 @@ fotoprint/
     .env.example
   media/                     # carpeta usada por el proveedor "local" (gitignored, una subcarpeta por usuario)
   public/                    # frontend estático, vanilla JS (sin build step)
-    index.html               # navegador de archivos (o mensaje "conectar" si no hay proveedor activo)
+    home.html                # navegador de archivos (o mensaje "conectar" si no hay proveedor activo)
+                             # se llama home.html (no index.html) para no chocar con el index.html
+                             # propio que algunos paneles de hosting (ej. Hestia) sirven por delante
+                             # del proxy en la raiz del dominio
     connect.html              # pantalla "Conectar almacenamiento"
     login.html
     register.html
@@ -191,7 +194,7 @@ despacha internamente según `connection.provider`:
   (`toFriendlyError` en `services/dropbox.js` / `services/googleDrive.js`).
   Un 401 invalida el `access_token` cacheado para forzar un refresh en el
   próximo pedido.
-- Frontend (`index.html` + `js/explorer.js`): breadcrumb clickeable (pila
+- Frontend (`home.html` + `js/explorer.js`): breadcrumb clickeable (pila
   `{ref, name}` armada en el cliente, no parsea el `ref` como path), ícono
   de carpeta / ícono genérico de imagen (por extensión) / ícono genérico de
   archivo — sin pedir thumbnails a la API para mantenerlo liviano —, tamaño
@@ -219,7 +222,7 @@ y Playwright, para ambos proveedores:
   interceptación de red en Playwright.
 
 Como vos ya tenés Dropbox funcionando en tu máquina, para probarlo de punta
-a punta: `cd backend && npm run dev`, entrá a `http://localhost:3000/index.html`
+a punta: `cd backend && npm run dev`, entrá a `http://localhost:3000/home.html`
 logueado, y deberías ver las carpetas/archivos reales. Fijate en particular
 que la navegación entre carpetas y "Nueva carpeta" sigan funcionando igual
 que antes (este paso tocó el contrato interno de la API, aunque el
@@ -279,7 +282,7 @@ Mismo patrón que Dropbox, con `services/googleDrive.js` (usa `googleapis`):
    agregaste como test user
 4. Deberías volver a `/connect.html?connected=google_drive` con la card en
    estado "Activo" y tu email de Gmail como `account_label`
-5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador de
+5. Andá a `http://localhost:3000/home.html` — deberías ver el navegador de
    archivos apuntando a "Mi Drive" con tus carpetas/archivos reales
 
 Al igual que con Dropbox, no pude probar el login real contra
@@ -376,7 +379,7 @@ Ya que no tenés todavía un bucket real, dejo la guía para cuando lo tengas:
    Key/Secret/bucket/región del paso anterior, click en **Conectar**
 4. Si las credenciales son válidas vas a ver la card en estado "Activo"
    inmediatamente (no hay redirect de por medio)
-5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador de
+5. Andá a `http://localhost:3000/home.html` — deberías ver el navegador de
    archivos apuntando al bucket
 
 **Nota sobre las pruebas de este paso**: a diferencia de Dropbox y Google
@@ -456,7 +459,7 @@ Mismo patrón que S3 (formulario de credenciales, sin OAuth), con
    (y marcá FTPS si tu hosting lo soporta)
 4. Si las credenciales son válidas vas a ver la card en estado "Activo"
    inmediatamente
-5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador
+5. Andá a `http://localhost:3000/home.html` — deberías ver el navegador
    de archivos apuntando a la raíz de tu cuenta FTP
 
 **Nota sobre las pruebas de este paso**: este sandbox **no tiene salida de
@@ -527,7 +530,7 @@ depender de terceros.
 2. Logueado, andá a `http://localhost:3000/connect.html`
 3. Click en **Usar carpeta local** — la card pasa a "Activo" al instante
    (no hay credenciales que completar)
-4. Andá a `http://localhost:3000/index.html` — el navegador de archivos
+4. Andá a `http://localhost:3000/home.html` — el navegador de archivos
    arranca vacío apuntando a tu carpeta (`backend/../media/user-<tu-id>/`)
 5. Probá **Nueva carpeta** y subir una imagen: deberían aparecer de
    inmediato en el explorador y en disco, en `media/user-<tu-id>/`

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>fotoprint - Iniciar sesion</title>
+  <title>KodakTienda - Iniciar sesion</title>
   <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
@@ -11,11 +11,11 @@
   <div class="page-center">
     <a class="auth-brand" href="/login.html">
       <img src="/img/logo.svg" alt="" width="34" height="34" />
-      <span class="brand-word">foto<span class="accent">print</span></span>
+      <span class="brand-word">Kodak<span class="accent">Tienda</span></span>
     </a>
     <div class="card">
       <h1>Iniciar sesion</h1>
-      <p class="subtitle">Entra a tu cuenta de fotoprint.</p>
+      <p class="subtitle">Entra a tu cuenta de KodakTienda.</p>
 
       <div id="error-box" class="error-box"></div>
 
@@ -53,7 +53,7 @@
           method: 'POST',
           body: JSON.stringify({ email, password }),
         });
-        window.location.href = '/index.html';
+        window.location.href = '/home.html';
       } catch (err) {
         errorBox.textContent = err.message;
         errorBox.classList.add('visible');

@@ -4,9 +4,9 @@
   --border: #e1e1e5;
   --text: #1c1c1e;
   --muted: #6b6b70;
-  --accent: #2f6fed;
-  --accent-hover: #2559c4;
-  --accent-soft: #eef4ff;
+  --accent: #ed1c24;
+  --accent-hover: #c1131a;
+  --accent-soft: #fdecec;
   --error: #c62828;
   --success: #1e7e34;
   --radius: 10px;
@@ -48,11 +48,14 @@ body {
   border-radius: 10px;
 }
 
-.auth-brand .brand-word {
+.brand-word {
   font-weight: 700;
-  font-size: 1.4rem;
   color: var(--text);
   letter-spacing: -0.02em;
+}
+
+.auth-brand .brand-word {
+  font-size: 1.4rem;
 }
 
 .brand-word .accent {
@@ -244,7 +247,7 @@ button.primary:disabled {
 }
 
 .provider-badge:hover {
-  background: #dfebff;
+  background: #fbdada;
 }
 
 .topbar .user-email {

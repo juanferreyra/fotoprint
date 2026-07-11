@@ -1,4 +1,4 @@
-# Desplegar fotoprint en Render.com
+# Desplegar KodakTienda en Render.com
 
 Este proyecto necesita un servidor Node.js corriendo todo el tiempo (no es un
 sitio estático ni PHP), así que hace falta un hosting que soporte eso.
@@ -97,7 +97,7 @@ Cuando quieras que los datos no se pierdan en cada reinicio:
 
 ## Dominio propio
 
-Cuando decidas el dominio/subdominio para fotoprint, Render lo soporta
+Cuando decidas el dominio/subdominio para KodakTienda, Render lo soporta
 desde **Settings → Custom Domains** del servicio (te da un CNAME/registro
 para configurar en tu DNS). Si terminás usando ese dominio en vez del
 `.onrender.com`, actualizá `BASE_URL` y los redirect URIs de Dropbox/Google

@@ -123,7 +123,7 @@ connectionsRouter.get('/google_drive/callback', async (req, res) => {
     const tokens = await googleDrive.exchangeCodeForToken(code);
     if (!tokens.refresh_token) {
       return res.redirect(
-        `/connect.html?error=${encodeURIComponent('Google no devolvio un refresh token. Revoca el acceso de fotoprint en myaccount.google.com/permissions y proba de nuevo.')}`
+        `/connect.html?error=${encodeURIComponent('Google no devolvio un refresh token. Revoca el acceso de KodakTienda en myaccount.google.com/permissions y proba de nuevo.')}`
       );
     }
 

@@ -22,7 +22,7 @@ app.use(express.json());
 
 app.use(
   session({
-    name: 'fotoprint.sid',
+    name: 'kodaktienda.sid',
     store: new SqliteStore({
       client: db,
       expired: { clear: true, intervalMs: 900000 },
@@ -43,6 +43,11 @@ app.use('/api/auth', authRouter);
 app.use('/api/connections', connectionsRouter);
 app.use('/api/files', filesRouter);
 
+// La pagina principal se sirve como home.html (no index.html) para que no
+// choque con el index.html propio que algunos paneles de hosting (ej.
+// Hestia) sirven por delante del proxy en la raiz del dominio.
+app.get('/', (req, res) => res.redirect('/home.html'));
+
 app.use(express.static(publicDir));
 
 app.use((req, res) => {
@@ -56,5 +61,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(config.port, () => {
-  console.log(`fotoprint backend escuchando en ${config.baseUrl}`);
+  console.log(`KodakTienda backend escuchando en ${config.baseUrl}`);
 });

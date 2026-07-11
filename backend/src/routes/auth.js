@@ -46,7 +46,7 @@ authRouter.post('/login', async (req, res) => {
 authRouter.post('/logout', (req, res) => {
   req.session.destroy((err) => {
     if (err) return res.status(500).json({ error: 'No se pudo cerrar sesion.' });
-    res.clearCookie('fotoprint.sid');
+    res.clearCookie('kodaktienda.sid');
     res.status(204).end();
   });
 });
