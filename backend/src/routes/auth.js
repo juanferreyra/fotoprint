@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { createUser, findUserByEmail, verifyPassword, toPublicUser, findUserById } from '../services/users.js';
+import { saveConnection } from '../services/connections.js';
+import * as local from '../services/local.js';
 
 export const authRouter = Router();
 
@@ -22,6 +24,19 @@ authRouter.post('/register', async (req, res) => {
 
   const user = await createUser(normalizedEmail, password);
   req.session.userId = user.id;
+
+  // La carpeta local del proyecto queda activada por defecto para cuentas
+  // nuevas, asi el usuario ya tiene donde subir fotos sin tener que pasar
+  // primero por "Conectar almacenamiento". Si por algun motivo no se puede
+  // crear (permisos del filesystem), no bloqueamos el registro: la cuenta
+  // se crea igual y el usuario puede conectar un proveedor a mano despues.
+  try {
+    await local.testCredentials();
+    saveConnection(user.id, 'local', local.ACCOUNT_LABEL, {});
+  } catch (err) {
+    console.error('No se pudo activar la carpeta local por defecto:', err);
+  }
+
   res.status(201).json({ user: toPublicUser(user) });
 });
 

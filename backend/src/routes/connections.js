@@ -224,7 +224,7 @@ connectionsRouter.post('/local', async (req, res) => {
     return res.status(err.httpStatus || 502).json({ error: err.message });
   }
 
-  saveConnection(req.session.userId, 'local', 'Carpeta del proyecto (media/)', {});
+  saveConnection(req.session.userId, 'local', local.ACCOUNT_LABEL, {});
 
   res.status(201).json({ connections: listConnections(req.session.userId) });
 });

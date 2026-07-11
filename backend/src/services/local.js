@@ -3,6 +3,8 @@ import path from 'node:path';
 import { config } from '../config.js';
 import { getActiveConnection } from './connections.js';
 
+export const ACCOUNT_LABEL = 'Carpeta del proyecto (media/)';
+
 // A diferencia de los demas proveedores, "local" no tiene credenciales: los
 // archivos se guardan directamente en disco, en config.mediaDir. Cada
 // usuario tiene su propia subcarpeta (user-<id>) para que dos usuarios que
