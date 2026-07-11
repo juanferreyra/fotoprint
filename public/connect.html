@@ -97,7 +97,7 @@
 
   <main class="container">
     <h2>Conectar almacenamiento</h2>
-    <p>Elegi el proveedor de nube donde queres subir y explorar tus imagenes. Podes tener varios conectados y elegir cual usar.</p>
+    <p>Elegi donde queres subir y explorar tus imagenes: un proveedor de nube, o la carpeta local del proyecto. Podes tener varios conectados y elegir cual usar.</p>
 
     <div id="error-box" class="error-box"></div>
     <div id="success-box" class="success-box" style="display:none"></div>
@@ -163,6 +163,7 @@
       google_drive: 'Google Drive',
       s3: 'Amazon S3',
       ftp: 'FTP',
+      local: 'Carpeta local (media/ del proyecto)',
     };
 
     const listEl = document.getElementById('provider-list');
@@ -204,7 +205,7 @@
       const byProvider = Object.fromEntries(connections.map((c) => [c.provider, c]));
       listEl.innerHTML = '';
 
-      for (const provider of ['dropbox', 'google_drive', 's3', 'ftp']) {
+      for (const provider of ['dropbox', 'google_drive', 's3', 'ftp', 'local']) {
         const conn = byProvider[provider];
         const card = document.createElement('div');
         card.className = 'provider-card';
@@ -245,6 +246,13 @@
             btn.textContent = 'Conectar';
             btn.addEventListener('click', () => toggleForm(provider === 's3' ? s3Form : ftpForm));
             actions.appendChild(btn);
+          } else if (provider === 'local') {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn-primary-sm';
+            btn.textContent = 'Usar carpeta local';
+            btn.addEventListener('click', () => connectLocal(btn));
+            actions.appendChild(btn);
           }
         } else {
           if (!conn.is_active) {
@@ -277,6 +285,19 @@
         render(connections);
       } catch (err) {
         showError(err.message);
+      }
+    }
+
+    async function connectLocal(btn) {
+      errorBox.classList.remove('visible');
+      btn.disabled = true;
+      try {
+        const { connections } = await apiFetch('/api/connections/local', { method: 'POST' });
+        render(connections);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
       }
     }
 

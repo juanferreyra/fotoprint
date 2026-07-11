@@ -1,9 +1,10 @@
 # fotoprint
 
 Aplicación web liviana para subir y explorar imágenes en la nube del propio usuario
-(Google Drive, Dropbox, Amazon S3 o un servidor FTP propio), sin almacenamiento
-permanente en el servidor y sin recomprimir ni recodificar las imágenes en ningún
-punto del flujo.
+(Google Drive, Dropbox, Amazon S3 o un servidor FTP propio) o en una carpeta local
+dentro del propio proyecto, sin almacenamiento permanente adicional en el servidor
+(salvo la carpeta local, si se elige esa opción) y sin recomprimir ni recodificar
+las imágenes en ningún punto del flujo.
 
 ## Estado actual
 
@@ -18,6 +19,8 @@ punto del flujo.
       real (ver sección [Amazon S3](#conexión-con-amazon-s3-sin-oauth))
 - [x] Conexión + navegador de archivos + subida (FTP) — probado y
       funcionando contra un servidor real
+- [x] Carpeta local del proyecto (`media/`) como proveedor sin credenciales —
+      probado de punta a punta (ver [Carpeta local del proyecto](#carpeta-local-del-proyecto-sin-credenciales))
 - [x] Configuración lista para desplegar en Render.com (ver [DEPLOY.md](./DEPLOY.md))
 
 ## Arquitectura
@@ -44,8 +47,10 @@ fotoprint/
       services/googleDrive.js # OAuth2 (googleapis), Drive API v3, misma interfaz que dropbox.js
       services/s3.js         # @aws-sdk/client-s3, misma interfaz, sin OAuth (credenciales de larga duracion)
       services/ftp.js        # basic-ftp, misma interfaz, sin cachear conexion (una nueva por operacion)
+      services/local.js      # fs/promises, misma interfaz, sin credenciales (guarda en config.mediaDir)
     data/                    # SQLite en disco (gitignored)
     .env.example
+  media/                     # carpeta usada por el proveedor "local" (gitignored, una subcarpeta por usuario)
   public/                    # frontend estático, vanilla JS (sin build step)
     index.html               # navegador de archivos (o mensaje "conectar" si no hay proveedor activo)
     connect.html              # pantalla "Conectar almacenamiento"
@@ -76,18 +81,19 @@ fotoprint/
   RAM, nunca se escribe a disco) y se van a mandar tal cual al SDK del
   proveedor. No hay ninguna librería de procesamiento de imágenes (sharp, jimp,
   canvas) en el proyecto.
-- **Multi-proveedor (Dropbox / Google Drive / S3 / FTP)**: `routes/files.js`
-  no sabe nada de ningún proveedor puntual — despacha según
-  `connection.provider` a un módulo de `services/` que implementa siempre la
-  misma interfaz (`listFolder`, `createFolder`, `uploadFile`, `deleteFile`).
-  La API HTTP usa un `ref` opaco por proveedor en vez de un path real: para
-  Dropbox y FTP el `ref` es literalmente el path (`/Fotos/Playa`, ambos
-  tienen carpetas reales), para Drive es el `id` del archivo/carpeta (Drive
-  no tiene paths reales — un mismo nombre de carpeta puede repetirse, así
-  que solo el `id` identifica un recurso sin ambigüedad), y para S3 es la
-  key/prefix del objeto (S3 tampoco tiene carpetas reales — se simulan con
-  objetos vacíos cuya key termina en `/`, y se listan con `Delimiter: '/'`
-  para separar "carpetas" de "archivos"). La raíz siempre es `ref = ''`.
+- **Multi-proveedor (Dropbox / Google Drive / S3 / FTP / local)**:
+  `routes/files.js` no sabe nada de ningún proveedor puntual — despacha
+  según `connection.provider` a un módulo de `services/` que implementa
+  siempre la misma interfaz (`listFolder`, `createFolder`, `uploadFile`,
+  `deleteFile`). La API HTTP usa un `ref` opaco por proveedor en vez de un
+  path real: para Dropbox, FTP y local el `ref` es literalmente el path
+  (`/Fotos/Playa`, los tres tienen carpetas reales), para Drive es el `id`
+  del archivo/carpeta (Drive no tiene paths reales — un mismo nombre de
+  carpeta puede repetirse, así que solo el `id` identifica un recurso sin
+  ambigüedad), y para S3 es la key/prefix del objeto (S3 tampoco tiene
+  carpetas reales — se simulan con objetos vacíos cuya key termina en `/`,
+  y se listan con `Delimiter: '/'` para separar "carpetas" de "archivos").
+  La raíz siempre es `ref = ''`.
   La columna `cloud_connections.provider` no tiene un `CHECK` con la lista
   de proveedores válidos (se validan en la capa de aplicación) — así,
   agregar un proveedor nuevo no necesita una migración de base de datos.
@@ -479,16 +485,71 @@ ni un solo intento de conexión real. Sí probé:
 **Confirmado por el usuario contra un servidor FTP real**: conexión,
 listado de la carpeta raíz, y el flujo funcionando de punta a punta.
 
+## Carpeta local del proyecto (sin credenciales)
+
+A pedido tuyo, se agregó un quinto proveedor para guardar las fotos
+directamente en disco, en una carpeta `media/` dentro del proyecto, sin
+necesidad de configurar ninguna cuenta de nube. Pensado como opción por
+defecto simple para correr la app localmente o en un servidor propio sin
+depender de terceros.
+
+- `services/local.js` implementa la misma interfaz que los demás
+  proveedores (`listFolder`, `createFolder`, `uploadFile`, `deleteFile`)
+  usando `fs/promises` en vez de un SDK externo. No hay credenciales que
+  guardar: la conexión se crea con `encrypted_credentials = '{}'` cifrado,
+  solo para poder reusar la misma tabla `cloud_connections` sin agregar una
+  columna nullable.
+- **Carpeta base configurable**: `config.mediaDir` (`MEDIA_DIR` en
+  `backend/.env`, default `../media` = `media/` en la raíz del proyecto,
+  no dentro de `backend/`, para que quede claro que es contenido del
+  usuario y no parte del código del servidor). Se crea sola con
+  `fs.mkdir(..., { recursive: true })` la primera vez que se usa, igual que
+  `backend/data/` para la base SQLite. Está en `.gitignore` (`/media/`).
+- **Aislamiento por usuario**: dentro de `mediaDir`, cada usuario tiene su
+  propia subcarpeta `user-<id>`, para que si dos usuarios distintos usan
+  "local" en el mismo despliegue no compartan ni pisen archivos entre sí.
+- **Path traversal**: `routes/files.js` ya rechaza cualquier `ref` que
+  contenga `..` antes de que llegue a ningún proveedor. `services/local.js`
+  agrega una segunda barrera propia (resuelve el path absoluto y verifica
+  que siga adentro de la carpeta del usuario) por si el módulo se llega a
+  usar desde otro lado sin pasar por esa validación.
+- `POST /api/connections/local`: no pide ningún campo (a diferencia de
+  S3/FTP). Solo confirma que se puede crear `mediaDir` en disco (permisos
+  del filesystem) y activa la conexión, igual que los demás proveedores
+  (desactiva cualquier otra conexión activa del usuario).
+- Frontend: en `/connect.html`, la card de "Carpeta local (media/ del
+  proyecto)" no abre ningún formulario — el botón **Usar carpeta local**
+  llama directo a `POST /api/connections/local` y refresca el estado.
+
+### Cómo probarlo
+
+1. `cd backend && npm run dev`
+2. Logueado, andá a `http://localhost:3000/connect.html`
+3. Click en **Usar carpeta local** — la card pasa a "Activo" al instante
+   (no hay credenciales que completar)
+4. Andá a `http://localhost:3000/index.html` — el navegador de archivos
+   arranca vacío apuntando a tu carpeta (`backend/../media/user-<tu-id>/`)
+5. Probá **Nueva carpeta** y subir una imagen: deberían aparecer de
+   inmediato en el explorador y en disco, en `media/user-<tu-id>/`
+
+A diferencia de los otros cuatro proveedores, esto corre enteramente en el
+mismo filesystem del sandbox, así que pude probarlo de punta a punta yo
+mismo (sin las limitaciones de red que sí afectaron a Dropbox/Drive/FTP):
+crear carpetas anidadas, subir un archivo y confirmar que el chequeo de
+integridad de `routes/files.js` compara bien el tamaño, listar y borrar, y
+que un `ref` con `..` se rechaza con 400 antes de tocar el disco.
+
 ## Estado del proyecto
 
-Con esto quedan cuatro proveedores andando: Dropbox, Google Drive y FTP
+Con esto quedan cinco proveedores andando: Dropbox, Google Drive y FTP
 probados de punta a punta por vos contra cuentas/servidores reales; S3 con
-el scaffold completo listo para cuando tengas un bucket para probar. El
-flujo end-to-end completo — registro, conectar almacenamiento,
-navegar/crear carpetas, subir imágenes sin compresión con chequeo de
-integridad — funciona igual sin importar cuál de los cuatro esté activo,
-gracias al despacho genérico en `routes/files.js` y a que los cuatro
-`services/*.js` implementan la misma interfaz.
+el scaffold completo listo para cuando tengas un bucket para probar; y la
+carpeta local del proyecto, probada de punta a punta sin depender de
+ninguna cuenta externa. El flujo end-to-end completo — registro, conectar
+almacenamiento, navegar/crear carpetas, subir imágenes sin compresión con
+chequeo de integridad — funciona igual sin importar cuál de los cinco esté
+activo, gracias al despacho genérico en `routes/files.js` y a que los
+cinco `services/*.js` implementan la misma interfaz.
 
 Además, la configuración para desplegar en Render.com ya está lista (ver
 [DEPLOY.md](./DEPLOY.md)).

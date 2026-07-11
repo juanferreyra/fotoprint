@@ -12,10 +12,11 @@ import * as dropbox from '../services/dropbox.js';
 import * as googleDrive from '../services/googleDrive.js';
 import * as s3 from '../services/s3.js';
 import * as ftp from '../services/ftp.js';
+import * as local from '../services/local.js';
 
 export const connectionsRouter = Router();
 
-const PROVIDERS = new Set(['dropbox', 'google_drive', 's3', 'ftp']);
+const PROVIDERS = new Set(['dropbox', 'google_drive', 's3', 'ftp', 'local']);
 
 connectionsRouter.use(requireAuth);
 
@@ -208,6 +209,22 @@ connectionsRouter.post('/ftp', async (req, res) => {
   // conexion nueva en cada operacion), asi que reconectar con credenciales
   // distintas no deja nada desactualizado para invalidar.
   saveConnection(req.session.userId, 'ftp', `${credentials.user}@${credentials.host}`, credentials);
+
+  res.status(201).json({ connections: listConnections(req.session.userId) });
+});
+
+// --- Carpeta local del proyecto (sin credenciales) ---
+
+connectionsRouter.post('/local', async (req, res) => {
+  try {
+    // No hay nada que "probar" salvo que se pueda crear la carpeta base en
+    // disco (permisos del filesystem donde corre el servidor).
+    await local.testCredentials();
+  } catch (err) {
+    return res.status(err.httpStatus || 502).json({ error: err.message });
+  }
+
+  saveConnection(req.session.userId, 'local', 'Carpeta del proyecto (media/)', {});
 
   res.status(201).json({ connections: listConnections(req.session.userId) });
 });
