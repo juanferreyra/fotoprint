@@ -1,11 +1,23 @@
 import { Router } from 'express';
-import { createUser, findUserByEmail, verifyPassword, toPublicUser, findUserById } from '../services/users.js';
+import { createUser, findUserByEmail, verifyPassword, toPublicUser, findUserById, promoteToAdmin } from '../services/users.js';
 import { saveConnection } from '../services/connections.js';
 import * as local from '../services/local.js';
+import { config } from '../config.js';
 
 export const authRouter = Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Si el email coincide con ADMIN_EMAIL, marca la cuenta como admin (sea
+// una cuenta nueva recien creada o una ya existente que hasta ahora no lo
+// era). Se llama en registro y en login para que funcione sin importar
+// cuando se configuro la variable de entorno.
+function promoteIfAdminEmail(user) {
+  if (config.adminEmail && user.email === config.adminEmail && !user.is_admin) {
+    promoteToAdmin(user.id);
+    user.is_admin = 1;
+  }
+}
 
 authRouter.post('/register', async (req, res) => {
   const { email, password } = req.body || {};
@@ -24,6 +36,7 @@ authRouter.post('/register', async (req, res) => {
 
   const user = await createUser(normalizedEmail, password);
   req.session.userId = user.id;
+  promoteIfAdminEmail(user);
 
   // La carpeta local del proyecto queda activada por defecto para cuentas
   // nuevas, asi el usuario ya tiene donde subir fotos sin tener que pasar
@@ -50,6 +63,7 @@ authRouter.post('/login', async (req, res) => {
   if (!user || !(await verifyPassword(user, password))) {
     return res.status(401).json({ error: 'Email o contrasena incorrectos.' });
   }
+  promoteIfAdminEmail(user);
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: 'No se pudo iniciar sesion.' });

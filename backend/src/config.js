@@ -23,6 +23,10 @@ export const config = {
   mediaDir: path.resolve(backendRoot, process.env.MEDIA_DIR || '../media'),
   sessionSecret: required('SESSION_SECRET'),
   tokenEncryptionKey: required('TOKEN_ENCRYPTION_KEY'),
+  // Cuenta que se marca como administradora al registrarse o iniciar sesion
+  // (ver routes/auth.js). Opcional: sin esta variable, no hay ninguna
+  // cuenta admin y la pantalla de administracion queda inaccesible.
+  adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
   dropbox: {
     appKey: process.env.DROPBOX_APP_KEY || '',
     appSecret: process.env.DROPBOX_APP_SECRET || '',

@@ -332,14 +332,15 @@ async function loadConnectionStatus() {
 }
 
 async function init() {
+  let user;
   try {
-    const { user } = await apiFetch('/api/auth/me');
+    ({ user } = await apiFetch('/api/auth/me'));
     document.getElementById('user-email').textContent = user.email;
   } catch {
     window.location.href = '/login.html';
     return;
   }
-  initTopbar();
+  initTopbar(user.is_admin);
   await loadConnectionStatus();
 }
 

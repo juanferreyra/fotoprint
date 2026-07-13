@@ -23,6 +23,9 @@ las imágenes en ningún punto del flujo.
       probado de punta a punta (ver [Carpeta local del proyecto](#carpeta-local-del-proyecto-sin-credenciales))
 - [x] Descargar archivos desde el explorador (ver [Descargar archivos](#descargar-archivos))
 - [x] Fondos variados en el login/registro (ver [Fondos variados en el login](#fondos-variados-en-el-login))
+- [x] Cuenta administradora: lista de usuarios, reseteo de contraseñas y
+      acceso a la carpeta local de todos los usuarios (ver
+      [Cuenta administradora](#cuenta-administradora))
 - [x] Configuración lista para desplegar en Render.com (ver [DEPLOY.md](./DEPLOY.md))
 
 ## Arquitectura
@@ -36,6 +39,7 @@ fotoprint/
       db.js                 # conexión SQLite (better-sqlite3) + migración de schema
       db/schema.sql         # definición de tablas
       middleware/auth.js    # requireAuth (guard de sesión)
+      middleware/requireAdmin.js # requireAdmin (guard de cuenta admin, va despues de requireAuth)
       routes/auth.js        # /api/auth/register, /login, /logout, /me
       routes/connections.js # /api/connections (listar/activar/borrar) + OAuth de Dropbox y Google Drive
       routes/files.js       # /api/files, /api/files/folders, /api/files/upload, /api/files/download
@@ -43,6 +47,7 @@ fotoprint/
                              # segun cual sea el proveedor activo del usuario)
       routes/loginBackground.js # /api/login-background (publica, sin auth): elige una foto al azar
                              # de public/img/login-bg/ para el fondo de login/registro
+      routes/admin.js        # /api/admin/users (listar) y /api/admin/users/:id/reset-password
       services/users.js     # acceso a la tabla users + bcrypt
       services/crypto.js    # cifrado AES-256-GCM de credenciales de nube
       services/connections.js # acceso a la tabla cloud_connections
@@ -61,6 +66,7 @@ fotoprint/
                              # propio que algunos paneles de hosting (ej. Hestia) sirven por delante
                              # del proxy en la raiz del dominio
     connect.html              # pantalla "Conectar almacenamiento"
+    admin.html                # pantalla de administracion (solo visible para la cuenta admin)
     login.html
     register.html
     css/style.css
@@ -607,6 +613,60 @@ al azar en cada carga, poniendo imagenes en `public/img/login-bg/` (ver el
 - Probado con Playwright: pantalla en blanco (carpeta vacia) sin romper
   nada, y con una imagen de prueba cargada se ve de fondo con el velo
   encima y la tarjeta de login perfectamente legible.
+
+## Cuenta administradora
+
+Hay una cuenta con permisos extra para ver la lista de usuarios y
+administrar sus cuentas, con dos capacidades: ver la carpeta local de
+cualquier usuario (no solo la propia) y resetear la contraseña de
+cualquier cuenta.
+
+- **Como se designa el admin**: variable de entorno `ADMIN_EMAIL` en
+  `backend/.env`. Cualquier cuenta que se registre o inicie sesión con ese
+  email exacto queda marcada como admin automáticamente (columna
+  `users.is_admin`), sea una cuenta nueva o una que ya existía antes de
+  configurar la variable. Sin `ADMIN_EMAIL`, no hay ninguna cuenta admin y
+  `/admin.html` y `/api/admin/*` quedan inaccesibles para todos (403).
+  Se descartó "el primer usuario registrado se vuelve admin solo" porque no
+  sirve para elegir un admin específico en una instalación que ya tiene
+  usuarios (quedaría admin el más viejo por id, no necesariamente el que
+  se quiere).
+- `middleware/requireAdmin.js`: se monta después de `requireAuth` en
+  `routes/admin.js`, devuelve 403 si la cuenta autenticada no tiene
+  `is_admin`.
+- `GET /api/admin/users`: lista todas las cuentas (email, `is_admin`,
+  fecha de alta). Nunca se manda `password_hash`.
+- `POST /api/admin/users/:id/reset-password`: genera una contraseña
+  temporal al azar (`crypto.randomBytes`, 12 caracteres en base64url), la
+  guarda ya hasheada, y la devuelve en texto plano **una sola vez** en la
+  respuesta — la app no manda emails, así que el admin se la tiene que
+  pasar al usuario por otro medio. En `admin.html` se muestra en un cartel
+  verde con instrucciones de copiarla en el momento.
+- **Acceso a la raíz del almacenamiento local (`media/`)**: `services/local.js`
+  ahora usa el email del usuario (saneado) como nombre de carpeta en vez
+  de `user-<id>`, para poder identificar de quién es cada carpeta con solo
+  mirar el filesystem. Para una cuenta admin, la raíz (`ref = ''`) deja de
+  ser su propia carpeta y pasa a ser `config.mediaDir` directamente — o sea
+  que al entrar al explorador con "Carpeta local" activa, el admin ve una
+  carpeta por cada usuario que la haya usado, y puede entrar a cualquiera
+  para listar, descargar, subir o borrar archivos ahí, con la misma
+  interfaz genérica de `routes/files.js` (no hizo falta ningún endpoint
+  nuevo para esto). Un usuario normal sigue completamente aislado en su
+  propia carpeta, sin poder salir de ahí (mismo chequeo de path traversal
+  de siempre).
+- **Migración de carpetas viejas**: las instalaciones que ya tenían
+  archivos guardados en `media/user-<id>/` (de antes de este cambio) se
+  migran solas: la primera vez que el usuario vuelve a usar la carpeta
+  local después de este deploy, si existe la carpeta vieja `user-<id>` y
+  todavía no existe la nueva con su email, se renombra automáticamente sin
+  perder nada.
+- Probado de punta a punta: cuenta regular + cuenta admin, el admin ve la
+  carpeta de la cuenta regular en la raíz y descarga un archivo suyo
+  (checksum MD5 idéntico), un usuario regular no puede escaparse de su
+  carpeta (400), `/api/admin/users` da 403 para una cuenta no-admin,
+  reseteo de contraseña seguido de login con la contraseña nueva
+  (funciona) y con la vieja (falla), y migración de una carpeta
+  `user-<id>` simulada a la carpeta nueva por email.
 
 ## Estado del proyecto
 

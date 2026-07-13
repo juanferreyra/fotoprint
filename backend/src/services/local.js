@@ -2,24 +2,66 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config.js';
 import { getActiveConnection } from './connections.js';
+import { findUserById } from './users.js';
 
 export const ACCOUNT_LABEL = 'Carpeta del proyecto (media/)';
 
 // A diferencia de los demas proveedores, "local" no tiene credenciales: los
 // archivos se guardan directamente en disco, en config.mediaDir. Cada
-// usuario tiene su propia subcarpeta (user-<id>) para que dos usuarios que
-// usen "local" en el mismo despliegue no compartan ni pisen archivos.
-function userRoot(userId) {
-  return path.join(config.mediaDir, `user-${userId}`);
+// usuario tiene su propia subcarpeta con el nombre de su email (saneado)
+// para que sea facil identificar de quien es cada carpeta mirando el
+// filesystem, y para que el admin (ver mas abajo) pueda reconocerlas.
+function sanitizeFolderName(email) {
+  return email.replace(/[^a-zA-Z0-9._@-]/g, '_');
+}
+
+// Migracion de instalaciones viejas: antes las carpetas se llamaban
+// user-<id> en vez del email. Si existe la carpeta vieja y todavia no se
+// migro, se renombra sola la primera vez que el usuario vuelve a usar el
+// proveedor local.
+async function migrateLegacyFolder(userId, folderName) {
+  const legacyDir = path.join(config.mediaDir, `user-${userId}`);
+  const newDir = path.join(config.mediaDir, folderName);
+  if (legacyDir === newDir) return;
+
+  try {
+    await fs.access(newDir);
+    return; // ya existe la carpeta nueva, no hay nada que migrar
+  } catch {
+    // sigue si newDir no existe todavia
+  }
+
+  try {
+    await fs.rename(legacyDir, newDir);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err; // ENOENT: no habia carpeta vieja, no hay nada que migrar
+  }
+}
+
+// El admin ve config.mediaDir directamente como raiz (una carpeta por
+// usuario, todas visibles), mientras que un usuario comun solo ve su
+// propia subcarpeta como raiz, sin poder salir de ahi.
+async function resolveContext(userId) {
+  const user = findUserById(userId);
+  if (!user) {
+    const err = new Error('Usuario no encontrado.');
+    err.httpStatus = 401;
+    throw err;
+  }
+
+  const folderName = sanitizeFolderName(user.email);
+  await migrateLegacyFolder(userId, folderName);
+
+  const root = user.is_admin ? config.mediaDir : path.join(config.mediaDir, folderName);
+  return { isAdmin: Boolean(user.is_admin), root };
 }
 
 // Traduce un ref opaco (path relativo tipo '/Vacaciones/foto.jpg', igual
 // que Dropbox/FTP) a una ruta absoluta en disco, verificando que quede
-// adentro de la carpeta del usuario. routes/files.js ya rechaza '..' en el
-// ref antes de llegar aca, pero esto es una segunda barrera por si
+// adentro de la raiz correspondiente. routes/files.js ya rechaza '..' en
+// el ref antes de llegar aca, pero esto es una segunda barrera por si
 // local.js se llega a usar desde otro lado.
-function resolvePath(userId, ref) {
-  const root = userRoot(userId);
+function resolveWithinRoot(root, ref) {
   const relative = ref === '' ? '' : ref.replace(/^\/+/, '');
   const resolved = path.resolve(root, relative);
   if (resolved !== root && !resolved.startsWith(root + path.sep)) {
@@ -52,7 +94,8 @@ export async function testCredentials() {
 
 export async function listFolder(userId, parentRef) {
   ensureActive(userId);
-  const dir = resolvePath(userId, parentRef);
+  const { root } = await resolveContext(userId);
+  const dir = resolveWithinRoot(root, parentRef);
   await fs.mkdir(dir, { recursive: true });
   const items = await fs.readdir(dir, { withFileTypes: true });
 
@@ -83,8 +126,9 @@ export async function listFolder(userId, parentRef) {
 
 export async function createFolder(userId, parentRef, name) {
   ensureActive(userId);
+  const { root } = await resolveContext(userId);
   const ref = joinRef(parentRef, name);
-  const dir = resolvePath(userId, ref);
+  const dir = resolveWithinRoot(root, ref);
 
   try {
     await fs.access(dir);
@@ -102,8 +146,9 @@ export async function createFolder(userId, parentRef, name) {
 // Guarda el buffer tal cual llego del request, sin ningun procesamiento.
 export async function uploadFile(userId, parentRef, name, buffer) {
   ensureActive(userId);
+  const { root } = await resolveContext(userId);
   const ref = joinRef(parentRef, name);
-  const filePath = resolvePath(userId, ref);
+  const filePath = resolveWithinRoot(root, ref);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, buffer);
   const stat = await fs.stat(filePath);
@@ -112,13 +157,15 @@ export async function uploadFile(userId, parentRef, name, buffer) {
 
 export async function deleteFile(userId, ref) {
   ensureActive(userId);
-  const filePath = resolvePath(userId, ref);
+  const { root } = await resolveContext(userId);
+  const filePath = resolveWithinRoot(root, ref);
   await fs.unlink(filePath);
 }
 
 export async function downloadFile(userId, ref) {
   ensureActive(userId);
-  const filePath = resolvePath(userId, ref);
+  const { root } = await resolveContext(userId);
+  const filePath = resolveWithinRoot(root, ref);
   return fs.readFile(filePath);
 }
 

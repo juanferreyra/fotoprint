@@ -32,7 +32,13 @@ export async function renderProviderBadge() {
   }
 }
 
-export function initTopbar() {
+export function applyAdminNavVisibility(isAdmin) {
+  const adminLink = document.getElementById('admin-nav-link');
+  if (adminLink) adminLink.style.display = isAdmin ? '' : 'none';
+}
+
+export function initTopbar(isAdmin) {
   highlightActiveNavLink();
   renderProviderBadge();
+  applyAdminNavVisibility(isAdmin);
 }

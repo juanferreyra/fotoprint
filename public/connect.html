@@ -87,6 +87,7 @@
     <nav class="nav-links">
       <a href="/home.html">Explorador</a>
       <a href="/connect.html">Conectar almacenamiento</a>
+      <a href="/admin.html" id="admin-nav-link" style="display:none">Administrador</a>
     </nav>
     <div class="topbar-right">
       <a id="provider-badge" class="provider-badge" href="/connect.html"></a>
@@ -156,7 +157,7 @@
 
   <script type="module">
     import { apiFetch } from '/js/api.js';
-    import { highlightActiveNavLink } from '/js/nav.js';
+    import { highlightActiveNavLink, applyAdminNavVisibility } from '/js/nav.js';
 
     const PROVIDER_LABELS = {
       dropbox: 'Dropbox',
@@ -376,14 +377,16 @@
     });
 
     async function init() {
+      let user;
       try {
-        const { user } = await apiFetch('/api/auth/me');
+        ({ user } = await apiFetch('/api/auth/me'));
         document.getElementById('user-email').textContent = user.email;
       } catch {
         window.location.href = '/login.html';
         return;
       }
       highlightActiveNavLink();
+      applyAdminNavVisibility(user.is_admin);
 
       const params = new URLSearchParams(window.location.search);
       if (params.get('error')) {

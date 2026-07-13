@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth.js';
 import { connectionsRouter } from './routes/connections.js';
 import { filesRouter } from './routes/files.js';
 import { loginBackgroundRouter } from './routes/loginBackground.js';
+import { adminRouter } from './routes/admin.js';
 
 const SqliteStore = (await import('better-sqlite3-session-store')).default(session);
 
@@ -51,6 +52,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/connections', connectionsRouter);
 app.use('/api/files', filesRouter);
 app.use('/api/login-background', loginBackgroundRouter);
+app.use('/api/admin', adminRouter);
 
 // La pagina principal se sirve como home.html (no index.html) para que no
 // choque con el index.html propio que algunos paneles de hosting (ej.
