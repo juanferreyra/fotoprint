@@ -86,7 +86,7 @@
     </a>
     <nav class="nav-links">
       <a href="/home.html">Explorador</a>
-      <a href="/connect.html">Conectar almacenamiento</a>
+      <a href="/connect.html" id="connect-nav-link" style="display:none">Conectar almacenamiento</a>
       <a href="/admin.html" id="admin-nav-link" style="display:none">Administrador</a>
     </nav>
     <div class="topbar-right">
@@ -385,6 +385,12 @@
         window.location.href = '/login.html';
         return;
       }
+
+      if (!user.is_admin) {
+        window.location.href = '/home.html';
+        return;
+      }
+
       highlightActiveNavLink();
       applyAdminNavVisibility(user.is_admin);
 

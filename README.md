@@ -634,6 +634,19 @@ cualquier cuenta.
 - `middleware/requireAdmin.js`: se monta después de `requireAuth` en
   `routes/admin.js`, devuelve 403 si la cuenta autenticada no tiene
   `is_admin`.
+- **La pantalla "Conectar almacenamiento" también es solo para el admin**:
+  un usuario regular ya tiene su carpeta local asignada sola al
+  registrarse (ver [Carpeta local del proyecto](#carpeta-local-del-proyecto-sin-credenciales))
+  y no necesita elegir ni cambiar de proveedor. En `routes/connections.js`,
+  `requireAdmin` se monta *después* de `GET /` (que sigue disponible para
+  cualquier usuario autenticado, porque el topbar y el explorador la usan
+  para saber cuál es la conexión activa — ya viene scopeada a
+  `req.session.userId`, no expone conexiones de otras cuentas) pero *antes*
+  de activar/borrar/crear conexiones y de los flujos OAuth. En el frontend,
+  `/connect.html` redirige a `/home.html` si el usuario logueado no es
+  admin, y el link "Conectar almacenamiento" del topbar (`js/nav.js`,
+  `applyAdminNavVisibility`) se oculta para cuentas no-admin, igual que
+  "Administrador".
 - `GET /api/admin/users`: lista todas las cuentas (email, `is_admin`,
   fecha de alta). Nunca se manda `password_hash`.
 - `POST /api/admin/users/:id/reset-password`: genera una contraseña

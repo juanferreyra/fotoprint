@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/requireAdmin.js';
 import {
   listConnections,
   activateConnection,
@@ -20,9 +21,16 @@ const PROVIDERS = new Set(['dropbox', 'google_drive', 's3', 'ftp', 'local']);
 
 connectionsRouter.use(requireAuth);
 
+// GET / (que conexion esta activa) sigue disponible para cualquier usuario
+// autenticado: el topbar y el explorador la necesitan para saber que
+// mostrar, y ya esta scopeada a su propio user_id (no expone conexiones de
+// otras cuentas). El resto de la pantalla "Conectar almacenamiento" —
+// activar/borrar/crear conexiones — es solo para la cuenta admin.
 connectionsRouter.get('/', (req, res) => {
   res.json({ connections: listConnections(req.session.userId) });
 });
+
+connectionsRouter.use(requireAdmin);
 
 connectionsRouter.post('/:provider/activate', (req, res) => {
   const { provider } = req.params;
