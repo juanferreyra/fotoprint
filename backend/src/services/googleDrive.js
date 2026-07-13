@@ -203,6 +203,10 @@ export async function deleteFile(userId, ref) {
   });
 }
 
+// La API de Drive no distingue archivo/carpeta para borrar: el mismo
+// files.delete borra una carpeta entera con todo su contenido.
+export const deleteFolder = deleteFile;
+
 export async function downloadFile(userId, ref) {
   return withDriveClient(userId, async (drive) => {
     const response = await drive.files.get(

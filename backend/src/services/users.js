@@ -12,6 +12,7 @@ const findByIdStmt = db.prepare('SELECT * FROM users WHERE id = ?');
 const listAllStmt = db.prepare('SELECT * FROM users ORDER BY created_at');
 const setAdminStmt = db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?');
 const setPasswordHashStmt = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+const deleteUserStmt = db.prepare('DELETE FROM users WHERE id = ?');
 
 export async function createUser(email, password) {
   const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
@@ -47,6 +48,14 @@ export async function resetPassword(userId) {
   const password_hash = await bcrypt.hash(tempPassword, SALT_ROUNDS);
   setPasswordHashStmt.run(password_hash, userId);
   return tempPassword;
+}
+
+// Borra la cuenta. cloud_connections tiene ON DELETE CASCADE (user_id), asi
+// que sus conexiones de nube se borran solas; el llamador (routes/admin.js)
+// se encarga de borrar la carpeta local en disco, ya que eso vive fuera de
+// la base de datos.
+export function deleteUser(userId) {
+  deleteUserStmt.run(userId);
 }
 
 export function toPublicUser(user) {

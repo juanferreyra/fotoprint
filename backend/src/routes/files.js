@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/requireAdmin.js';
 import { getActiveConnection } from '../services/connections.js';
 import * as dropboxService from '../services/dropbox.js';
 import * as googleDriveService from '../services/googleDrive.js';
@@ -17,6 +18,7 @@ filesRouter.use(requireAuth);
 //   createFolder(userId, parentRef, name) -> { type: 'folder', name, ref }
 //   uploadFile(userId, parentRef, name, buffer) -> { type: 'file', name, ref, size }
 //   deleteFile(userId, ref) -> void
+//   deleteFolder(userId, ref) -> void
 //   downloadFile(userId, ref) -> Buffer
 // "ref" es opaco por proveedor: para Dropbox es el path, para Drive el id
 // del archivo/carpeta. La raiz siempre es ''.
@@ -87,6 +89,29 @@ function sanitizeFileName(name) {
   return base;
 }
 
+// Solo se usa para la vista previa inline (miniatura + lightbox) en
+// el explorador. Fuera de esta lista, la descarga cae en
+// application/octet-stream (no hay forma sensata de previsualizar inline
+// un archivo que no sea imagen, y la descarga normal no necesita esto).
+const IMAGE_MIME_TYPES = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.svg': 'image/svg+xml',
+};
+
+function imageMimeType(name) {
+  const ext = name.includes('.') ? `.${name.split('.').pop().toLowerCase()}` : '';
+  return IMAGE_MIME_TYPES[ext];
+}
+
 function handleError(err, res) {
   if (err.httpStatus) {
     return res.status(err.httpStatus).json({ error: err.message });
@@ -115,14 +140,48 @@ filesRouter.get('/download', async (req, res) => {
 
     const buffer = await service.downloadFile(req.session.userId, ref);
 
-    res.setHeader('Content-Type', 'application/octet-stream');
+    // inline=1 es lo que usan la miniatura y el lightbox del explorador
+    // para mostrar la imagen en la pagina en vez de forzar la descarga.
+    // Sin inline (o si el archivo no es una imagen conocida), se manda
+    // como attachment para forzar la descarga, igual que siempre.
+    const mimeType = req.query.inline === '1' ? imageMimeType(name) : undefined;
+    const disposition = mimeType ? 'inline' : 'attachment';
+
+    res.setHeader('Content-Type', mimeType || 'application/octet-stream');
     // filename para navegadores viejos + filename* (RFC 5987) para que los
     // nombres con acentos/espacios/caracteres no ASCII se guarden bien.
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`
+      `${disposition}; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`
     );
     res.send(buffer);
+  } catch (err) {
+    handleError(err, res);
+  }
+});
+
+filesRouter.delete('/', async (req, res) => {
+  try {
+    const service = getProviderService(req.session.userId);
+    const ref = normalizeRef(req.query.ref);
+    if (!ref) throw badRequest('Falta indicar que archivo eliminar.');
+    await service.deleteFile(req.session.userId, ref);
+    res.status(204).end();
+  } catch (err) {
+    handleError(err, res);
+  }
+});
+
+// Solo la cuenta admin puede borrar carpetas (un usuario regular puede
+// borrar fotos de su propia carpeta con DELETE / de arriba, pero no
+// carpetas enteras, ni siquiera las suyas).
+filesRouter.delete('/folders', requireAdmin, async (req, res) => {
+  try {
+    const service = getProviderService(req.session.userId);
+    const ref = normalizeRef(req.query.ref);
+    if (!ref) throw badRequest('No se puede eliminar la carpeta raiz.');
+    await service.deleteFolder(req.session.userId, ref);
+    res.status(204).end();
   } catch (err) {
     handleError(err, res);
   }

@@ -6,6 +6,7 @@ import {
   HeadObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
 import { getActiveConnection } from './connections.js';
 
@@ -173,6 +174,33 @@ export async function uploadFile(userId, parentRef, name, buffer) {
 export async function deleteFile(userId, ref) {
   return withS3Client(userId, async (client, connection) => {
     await client.send(new DeleteObjectCommand({ Bucket: connection.credentials.bucket, Key: ref }));
+  });
+}
+
+// S3 no tiene "borrar carpeta": hay que listar todos los objetos que
+// empiezan con ese prefijo (a cualquier profundidad, sin Delimiter) y
+// borrarlos en lote de a 1000 (limite de DeleteObjectsCommand por request).
+export async function deleteFolder(userId, ref) {
+  return withS3Client(userId, async (client, connection) => {
+    let continuationToken;
+    do {
+      const listResponse = await client.send(
+        new ListObjectsV2Command({
+          Bucket: connection.credentials.bucket,
+          Prefix: ref,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      const objects = (listResponse.Contents || []).map((object) => ({ Key: object.Key }));
+      if (objects.length > 0) {
+        await client.send(
+          new DeleteObjectsCommand({ Bucket: connection.credentials.bucket, Delete: { Objects: objects } })
+        );
+      }
+
+      continuationToken = listResponse.IsTruncated ? listResponse.NextContinuationToken : undefined;
+    } while (continuationToken);
   });
 }
 

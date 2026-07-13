@@ -162,6 +162,25 @@ export async function deleteFile(userId, ref) {
   await fs.unlink(filePath);
 }
 
+// Solo la cuenta admin puede llegar aca (gateado en routes/files.js), asi
+// que no hace falta ningun chequeo extra de permisos: el root ya resuelve
+// a config.mediaDir para el admin, entonces cualquier ref valido (menos la
+// raiz misma) es una carpeta de algun usuario o una subcarpeta suya.
+export async function deleteFolder(userId, ref) {
+  ensureActive(userId);
+  const { root } = await resolveContext(userId);
+  const dir = resolveWithinRoot(root, ref);
+  await fs.rm(dir, { recursive: true, force: true });
+}
+
+// Usado por routes/admin.js al eliminar una cuenta: borra la carpeta local
+// del usuario (si la tiene) directamente por email, sin pasar por
+// resolveContext (el usuario ya no existe en la base en ese punto).
+export async function deleteUserFolder(email) {
+  const dir = path.join(config.mediaDir, sanitizeFolderName(email));
+  await fs.rm(dir, { recursive: true, force: true });
+}
+
 export async function downloadFile(userId, ref) {
   ensureActive(userId);
   const { root } = await resolveContext(userId);

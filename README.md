@@ -26,6 +26,9 @@ las imágenes en ningún punto del flujo.
 - [x] Cuenta administradora: lista de usuarios, reseteo de contraseñas y
       acceso a la carpeta local de todos los usuarios (ver
       [Cuenta administradora](#cuenta-administradora))
+- [x] Miniaturas + vista ampliada de imágenes, y permisos de borrado
+      diferenciados para admin/usuario regular (ver
+      [Miniaturas, vista ampliada y borrado](#miniaturas-vista-ampliada-y-borrado))
 - [x] Configuración lista para desplegar en Render.com (ver [DEPLOY.md](./DEPLOY.md))
 
 ## Arquitectura
@@ -680,6 +683,80 @@ cualquier cuenta.
   reseteo de contraseña seguido de login con la contraseña nueva
   (funciona) y con la vieja (falla), y migración de una carpeta
   `user-<id>` simulada a la carpeta nueva por email.
+
+## Miniaturas, vista ampliada y borrado
+
+En el explorador, cada imagen se muestra con una miniatura en vez del
+ícono genérico, y un click la abre en grande (lightbox). También se puede
+borrar archivos y (según el rol) carpetas y cuentas de usuario.
+
+- **Miniatura + lightbox**: reutiliza el mismo endpoint de descarga
+  (`GET /api/files/download`) agregando `inline=1`, en vez de crear una
+  ruta aparte. Con `inline=1`, si el nombre tiene una extensión de imagen
+  conocida (`routes/files.js`, mapa `IMAGE_MIME_TYPES`), la respuesta usa
+  el `Content-Type` real (`image/jpeg`, `image/png`, etc.) y
+  `Content-Disposition: inline` en vez de `attachment`, para que el
+  navegador la muestre en la página en lugar de forzar la descarga. Sin
+  `inline=1` (o para un archivo que no es imagen), el comportamiento es
+  exactamente el de antes. No hay ninguna librería de procesamiento de
+  imágenes de por medio — la miniatura es la imagen completa mostrada
+  chica por CSS (`object-fit: cover`, 40×40px) con `loading="lazy"` para no
+  pedir todas las imágenes de una carpeta de una sola vez, solo las que
+  entran en pantalla. El lightbox (`public/js/explorer.js`) es un overlay
+  simple hecho a mano (sin librería): se cierra clickeando el fondo, el
+  botón ✕, o con Escape.
+- **Borrar archivos**: `DELETE /api/files?ref=` (requiere sesión, sin
+  restricción de rol adicional — ver más abajo por qué alcanza con eso).
+  Botón 🗑 al lado de cada archivo, con confirmación (`window.confirm`)
+  antes de mandar el pedido.
+- **Borrar carpetas — solo admin**: `DELETE /api/files/folders?ref=`, con
+  `requireAdmin` además de `requireAuth`. Se agregó `deleteFolder(userId, ref)`
+  a los cinco `services/*.js`: en Dropbox y Google Drive es literalmente el
+  mismo `deleteFile`/`filesDeleteV2`/`files.delete` (esas APIs no
+  distinguen archivo de carpeta para borrar), en FTP es
+  `client.removeDir(ref)` (recursivo, de `basic-ftp`), en S3 hay que listar
+  todos los objetos con ese prefijo (sin `Delimiter`, a cualquier
+  profundidad) y borrarlos en lote con `DeleteObjectsCommand`, y en local
+  es `fs.rm(dir, { recursive: true, force: true })`. La ruta rechaza con
+  400 un intento de borrar la raíz (`ref` vacío) para no poder vaciar de un
+  clic toda una cuenta de nube o, en el caso del admin en local,
+  `config.mediaDir` entero. El botón 🗑 de una carpeta solo se renderiza en
+  el frontend si `user.is_admin`, pero el control real está en el backend.
+- **Por qué borrar archivos no necesita chequeo de rol aparte**: para
+  Dropbox/Drive/S3/FTP cada conexión es la cuenta de nube de un único
+  usuario — no hay forma de que un usuario le pase a la API un `ref` de
+  "la nube de otro", esa noción no existe para esos cuatro proveedores.
+  Para local, el aislamiento ya lo resuelve `resolveContext` /
+  `resolveWithinRoot` (ver [Cuenta administradora](#cuenta-administradora)):
+  la raíz de un usuario regular es su propia carpeta (no puede
+  construir un `ref` que apunte afuera, tira 400), y la del admin es
+  `config.mediaDir` completo. O sea que "admin puede borrar cualquier
+  imagen, un usuario regular solo las de su propia carpeta" ya sale gratis
+  de la misma resolución de rutas que se usa para listar/subir/descargar,
+  sin lógica nueva.
+- **Eliminar usuarios — solo admin**: `DELETE /api/admin/users/:id` en
+  `admin.html`, con confirmación. Borra la fila de `users` (`cloud_connections`
+  se borra sola por el `ON DELETE CASCADE` de la FK) y, mejor esfuerzo, la
+  carpeta local del usuario en disco (`local.deleteUserFolder(email)`) — si
+  falla esto último no se cancela el borrado de la cuenta. No se puede
+  eliminar la propia cuenta logueada (400 en el backend, y el botón
+  "Eliminar" directamente no aparece en esa fila en `admin.html`).
+- **Endurecido `requireAuth`**: ahora también confirma que el usuario de
+  `req.session.userId` siga existiendo (antes solo chequeaba que la sesión
+  tuviera un `userId` seteado). Sin esto, la sesión de una cuenta recién
+  eliminada seguía "autenticada" hasta que expirara sola, y podía terminar
+  en errores confusos más adentro en vez de un 401 limpio apenas se borra
+  la cuenta.
+- Probado de punta a punta: miniatura e inline (`Content-Type: image/jpeg`,
+  `Content-Disposition: inline`) vs. descarga normal (`octet-stream`,
+  `attachment`) para el mismo archivo; usuario regular borra su propio
+  archivo (204) pero no puede borrar ninguna carpeta (403); admin borra una
+  carpeta de otro usuario y no puede borrar la raíz (400); admin elimina
+  una cuenta (204), confirma que su carpeta desaparece del disco, y que la
+  sesión vieja de esa cuenta ya no sirve (401); admin no puede eliminarse a
+  sí mismo (400, y sin botón en la UI). Con Playwright: miniatura visible
+  en la lista, click abre el lightbox con la imagen grande, botón ✕ la
+  cierra, y el diálogo de confirmación de borrado con su mensaje.
 
 ## Estado del proyecto
 

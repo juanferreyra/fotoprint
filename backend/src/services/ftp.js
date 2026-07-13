@@ -143,6 +143,13 @@ export async function deleteFile(userId, ref) {
   });
 }
 
+// removeDir borra la carpeta y todo su contenido de forma recursiva.
+export async function deleteFolder(userId, ref) {
+  return withFtpClient(userId, async (client) => {
+    await client.removeDir(toRemotePath(ref));
+  });
+}
+
 // basic-ftp solo permite descargar hacia un stream de escritura (no
 // devuelve un buffer directamente), asi que acumulamos los chunks en
 // memoria mientras la conexion FTP sigue abierta y devolvemos el buffer ya

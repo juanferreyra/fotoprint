@@ -17,6 +17,7 @@ const ROOT_LABELS = {
 // medida que el usuario entra/sale de carpetas.
 let breadcrumbStack = [{ ref: '', name: 'Raiz' }];
 let currentRef = '';
+let isAdmin = false;
 
 const els = {
   noConnection: document.getElementById('no-connection'),
@@ -32,6 +33,9 @@ const els = {
   uploadInput: document.getElementById('upload-input'),
   uploadSelectBtn: document.getElementById('upload-select-btn'),
   uploadQueue: document.getElementById('upload-queue'),
+  lightbox: document.getElementById('lightbox'),
+  lightboxImg: document.getElementById('lightbox-img'),
+  lightboxClose: document.getElementById('lightbox-close'),
 };
 
 function showError(message) {
@@ -44,10 +48,36 @@ function clearError() {
   els.errorBox.textContent = '';
 }
 
-function fileIcon(name) {
+function isImage(name) {
   const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
-  return IMAGE_EXTENSIONS.has(ext) ? '\u{1F5BC}️' : '\u{1F4C4}';
+  return IMAGE_EXTENSIONS.has(ext);
 }
+
+// inline=1 le pide al servidor Content-Type/Content-Disposition para mostrar
+// la imagen en la pagina (miniatura, lightbox) en vez de forzar la descarga.
+function fileUrl(entry, inline) {
+  const params = new URLSearchParams({ ref: entry.ref, name: entry.name });
+  if (inline) params.set('inline', '1');
+  return `/api/files/download?${params.toString()}`;
+}
+
+function openLightbox(entry) {
+  els.lightboxImg.src = fileUrl(entry, true);
+  els.lightboxImg.alt = entry.name;
+  els.lightbox.style.display = 'flex';
+}
+
+function closeLightbox() {
+  els.lightbox.style.display = 'none';
+  els.lightboxImg.src = '';
+}
+
+els.lightbox.addEventListener('click', closeLightbox);
+els.lightboxClose.addEventListener('click', closeLightbox);
+els.lightboxImg.addEventListener('click', (event) => event.stopPropagation());
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeLightbox();
+});
 
 function formatSize(bytes) {
   if (bytes === undefined || bytes === null) return '';
@@ -100,10 +130,20 @@ function renderEntries(entries) {
     const row = document.createElement('div');
     row.className = entry.type === 'folder' ? 'entry-row is-folder' : 'entry-row';
 
-    const icon = document.createElement('span');
-    icon.className = 'entry-icon';
-    icon.textContent = entry.type === 'folder' ? '\u{1F4C1}' : fileIcon(entry.name);
-    row.appendChild(icon);
+    if (entry.type === 'file' && isImage(entry.name)) {
+      const thumb = document.createElement('img');
+      thumb.className = 'entry-thumb';
+      thumb.src = fileUrl(entry, true);
+      thumb.alt = entry.name;
+      thumb.loading = 'lazy';
+      thumb.addEventListener('click', () => openLightbox(entry));
+      row.appendChild(thumb);
+    } else {
+      const icon = document.createElement('span');
+      icon.className = 'entry-icon';
+      icon.textContent = entry.type === 'folder' ? '\u{1F4C1}' : '\u{1F4C4}';
+      row.appendChild(icon);
+    }
 
     const name = document.createElement('span');
     name.className = 'entry-name';
@@ -118,11 +158,20 @@ function renderEntries(entries) {
 
       const downloadLink = document.createElement('a');
       downloadLink.className = 'entry-download';
-      downloadLink.href = `/api/files/download?ref=${encodeURIComponent(entry.ref)}&name=${encodeURIComponent(entry.name)}`;
+      downloadLink.href = fileUrl(entry, false);
       downloadLink.title = 'Descargar';
       downloadLink.setAttribute('aria-label', `Descargar ${entry.name}`);
       downloadLink.textContent = '⬇';
       row.appendChild(downloadLink);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'entry-delete';
+      deleteBtn.title = 'Eliminar';
+      deleteBtn.setAttribute('aria-label', `Eliminar ${entry.name}`);
+      deleteBtn.textContent = '🗑';
+      deleteBtn.addEventListener('click', () => deleteEntry(entry));
+      row.appendChild(deleteBtn);
     }
 
     if (entry.type === 'folder') {
@@ -130,9 +179,38 @@ function renderEntries(entries) {
         const newStack = [...breadcrumbStack, { ref: entry.ref, name: entry.name }];
         loadFolder(entry.ref, newStack);
       });
+
+      // Borrar carpetas es solo para el admin (un usuario regular puede
+      // borrar fotos de su propia carpeta, pero no carpetas enteras).
+      if (isAdmin) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'entry-delete';
+        deleteBtn.title = 'Eliminar carpeta';
+        deleteBtn.setAttribute('aria-label', `Eliminar carpeta ${entry.name}`);
+        deleteBtn.textContent = '🗑';
+        deleteBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          deleteEntry(entry);
+        });
+        row.appendChild(deleteBtn);
+      }
     }
 
     els.entryList.appendChild(row);
+  }
+}
+
+async function deleteEntry(entry) {
+  const label = entry.type === 'folder' ? `la carpeta "${entry.name}" y todo su contenido` : `"${entry.name}"`;
+  if (!window.confirm(`¿Eliminar ${label}? Esta accion no se puede deshacer.`)) return;
+
+  try {
+    const endpoint = entry.type === 'folder' ? '/api/files/folders' : '/api/files';
+    await apiFetch(`${endpoint}?ref=${encodeURIComponent(entry.ref)}`, { method: 'DELETE' });
+    await loadFolder(currentRef);
+  } catch (err) {
+    showError(err.message);
   }
 }
 
@@ -340,6 +418,7 @@ async function init() {
     window.location.href = '/login.html';
     return;
   }
+  isAdmin = Boolean(user.is_admin);
   initTopbar(user.is_admin);
   await loadConnectionStatus();
 }

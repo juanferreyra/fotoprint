@@ -95,6 +95,7 @@
     const tableEl = document.getElementById('users-table');
     const errorBox = document.getElementById('error-box');
     const resetResult = document.getElementById('reset-result');
+    let currentUserId = null;
 
     function showError(message) {
       errorBox.textContent = message;
@@ -131,6 +132,15 @@
         resetBtn.addEventListener('click', () => resetPassword(user, resetBtn));
         row.appendChild(resetBtn);
 
+        if (user.id !== currentUserId) {
+          const deleteBtn = document.createElement('button');
+          deleteBtn.type = 'button';
+          deleteBtn.className = 'btn-danger';
+          deleteBtn.textContent = 'Eliminar';
+          deleteBtn.addEventListener('click', () => deleteUser(user, deleteBtn));
+          row.appendChild(deleteBtn);
+        }
+
         tableEl.appendChild(row);
       }
     }
@@ -162,11 +172,27 @@
       }
     }
 
+    async function deleteUser(user, btn) {
+      if (!window.confirm(`¿Eliminar la cuenta de ${user.email}? Tambien se borra su carpeta local. Esta accion no se puede deshacer.`)) {
+        return;
+      }
+
+      btn.disabled = true;
+      try {
+        await apiFetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
+        await load();
+      } catch (err) {
+        showError(err.message);
+        btn.disabled = false;
+      }
+    }
+
     async function init() {
       let user;
       try {
         ({ user } = await apiFetch('/api/auth/me'));
         document.getElementById('user-email').textContent = user.email;
+        currentUserId = user.id;
       } catch {
         window.location.href = '/login.html';
         return;
