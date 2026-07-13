@@ -113,7 +113,10 @@
       <input type="text" id="s3-access-key" autocomplete="off" required />
 
       <label for="s3-secret-key">Secret Access Key</label>
-      <input type="password" id="s3-secret-key" autocomplete="off" required />
+      <div class="password-field">
+        <input type="password" id="s3-secret-key" autocomplete="off" required />
+        <button type="button" class="password-toggle" data-target="s3-secret-key" aria-label="Mostrar contrasena">👁</button>
+      </div>
 
       <label for="s3-bucket">Bucket</label>
       <input type="text" id="s3-bucket" placeholder="mi-bucket-fotos" required />
@@ -141,7 +144,10 @@
       <input type="text" id="ftp-user" autocomplete="off" required />
 
       <label for="ftp-password">Contrasena</label>
-      <input type="password" id="ftp-password" autocomplete="off" required />
+      <div class="password-field">
+        <input type="password" id="ftp-password" autocomplete="off" required />
+        <button type="button" class="password-toggle" data-target="ftp-password" aria-label="Mostrar contrasena">👁</button>
+      </div>
 
       <label class="checkbox-label">
         <input type="checkbox" id="ftp-secure" />
@@ -158,6 +164,9 @@
   <script type="module">
     import { apiFetch } from '/js/api.js';
     import { highlightActiveNavLink, applyAdminNavVisibility } from '/js/nav.js';
+    import { initPasswordToggles } from '/js/passwordToggle.js';
+
+    initPasswordToggles();
 
     const PROVIDER_LABELS = {
       dropbox: 'Dropbox',

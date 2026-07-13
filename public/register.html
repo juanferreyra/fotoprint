@@ -25,7 +25,10 @@
         <input type="email" id="email" name="email" autocomplete="email" required />
 
         <label for="password">Contrasena</label>
-        <input type="password" id="password" name="password" autocomplete="new-password" minlength="8" required />
+        <div class="password-field">
+          <input type="password" id="password" name="password" autocomplete="new-password" minlength="8" required />
+          <button type="button" class="password-toggle" data-target="password" aria-label="Mostrar contrasena">👁</button>
+        </div>
 
         <button type="submit" class="primary" id="submit-btn">Crear cuenta</button>
       </form>
@@ -37,8 +40,10 @@
   <script type="module">
     import { apiFetch } from '/js/api.js';
     import { initAuthBackground } from '/js/authBg.js';
+    import { initPasswordToggles } from '/js/passwordToggle.js';
 
     initAuthBackground();
+    initPasswordToggles();
 
     const form = document.getElementById('register-form');
     const errorBox = document.getElementById('error-box');
