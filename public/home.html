@@ -36,7 +36,12 @@
     <div id="explorer" style="display:none">
       <div class="explorer-toolbar">
         <nav class="breadcrumb" id="breadcrumb"></nav>
-        <div>
+        <div class="explorer-toolbar-actions">
+          <label class="select-all-label" id="select-all-label" style="display:none">
+            <input type="checkbox" id="select-all-checkbox" />
+            Seleccionar todo
+          </label>
+          <button class="btn-secondary" id="download-selected-btn" type="button" style="display:none">Descargar seleccion</button>
           <button class="btn-primary-sm" id="new-folder-btn" type="button">Nueva carpeta</button>
         </div>
       </div>

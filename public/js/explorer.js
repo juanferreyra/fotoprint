@@ -18,6 +18,10 @@ const ROOT_LABELS = {
 let breadcrumbStack = [{ ref: '', name: 'Raiz' }];
 let currentRef = '';
 let isAdmin = false;
+// ref -> { ref, name, type }. Se vacia cada vez que se cambia de carpeta
+// (seleccionar cosas de carpetas distintas para un mismo zip no vale la
+// pena la complejidad extra que agregaria).
+let selectedEntries = new Map();
 
 const els = {
   noConnection: document.getElementById('no-connection'),
@@ -36,6 +40,9 @@ const els = {
   lightbox: document.getElementById('lightbox'),
   lightboxImg: document.getElementById('lightbox-img'),
   lightboxClose: document.getElementById('lightbox-close'),
+  selectAllLabel: document.getElementById('select-all-label'),
+  selectAllCheckbox: document.getElementById('select-all-checkbox'),
+  downloadSelectedBtn: document.getElementById('download-selected-btn'),
 };
 
 function showError(message) {
@@ -79,6 +86,79 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') closeLightbox();
 });
 
+function updateSelectionUI() {
+  const count = selectedEntries.size;
+  els.downloadSelectedBtn.textContent = `Descargar seleccion (${count})`;
+  els.downloadSelectedBtn.style.display = count > 0 ? '' : 'none';
+}
+
+function toggleSelection(entry, checked) {
+  if (checked) selectedEntries.set(entry.ref, entry);
+  else selectedEntries.delete(entry.ref);
+  updateSelectionUI();
+}
+
+// No hay forma nativa de armar un zip en el navegador ni en Node sin una
+// libreria (a diferencia de gzip, que si trae node:zlib), asi que esto pega
+// contra /api/files/download-zip (que arma el zip en el servidor con
+// "archiver") y descarga el blob resultante.
+async function downloadZip(items, filename, btn) {
+  clearError();
+  const originalText = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Generando zip...';
+  }
+
+  try {
+    const res = await fetch('/api/files/download-zip', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+
+    if (!res.ok) {
+      let message = `Error ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data?.error) message = data.error;
+      } catch {
+        // sin cuerpo JSON legible, nos quedamos con el mensaje generico
+      }
+      throw new Error(message);
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+}
+
+els.selectAllCheckbox.addEventListener('change', () => {
+  document.querySelectorAll('.entry-select').forEach((checkbox) => {
+    checkbox.checked = els.selectAllCheckbox.checked;
+    checkbox.dispatchEvent(new Event('change'));
+  });
+});
+
+els.downloadSelectedBtn.addEventListener('click', () => {
+  downloadZip(Array.from(selectedEntries.values()), 'descarga.zip', els.downloadSelectedBtn);
+});
+
 function formatSize(bytes) {
   if (bytes === undefined || bytes === null) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -117,6 +197,12 @@ function renderBreadcrumb(stack) {
 
 function renderEntries(entries) {
   els.entryList.innerHTML = '';
+  selectedEntries.clear();
+  updateSelectionUI();
+  els.selectAllCheckbox.checked = false;
+  // Seleccionar varias cosas y bajarlas juntas en un zip es solo para el
+  // admin (mismo criterio que borrar carpetas/cuentas).
+  els.selectAllLabel.style.display = isAdmin && entries.length > 0 ? '' : 'none';
 
   if (entries.length === 0) {
     const empty = document.createElement('div');
@@ -129,6 +215,16 @@ function renderEntries(entries) {
   for (const entry of entries) {
     const row = document.createElement('div');
     row.className = entry.type === 'folder' ? 'entry-row is-folder' : 'entry-row';
+
+    if (isAdmin) {
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'entry-select';
+      checkbox.setAttribute('aria-label', `Seleccionar ${entry.name}`);
+      checkbox.addEventListener('click', (event) => event.stopPropagation());
+      checkbox.addEventListener('change', () => toggleSelection(entry, checkbox.checked));
+      row.appendChild(checkbox);
+    }
 
     if (entry.type === 'file' && isImage(entry.name)) {
       const thumb = document.createElement('img');
@@ -180,9 +276,22 @@ function renderEntries(entries) {
         loadFolder(entry.ref, newStack);
       });
 
-      // Borrar carpetas es solo para el admin (un usuario regular puede
-      // borrar fotos de su propia carpeta, pero no carpetas enteras).
+      // Borrar y descargar carpetas enteras es solo para el admin (un
+      // usuario regular puede borrar fotos de su propia carpeta, pero no
+      // carpetas enteras).
       if (isAdmin) {
+        const zipBtn = document.createElement('button');
+        zipBtn.type = 'button';
+        zipBtn.className = 'entry-download';
+        zipBtn.title = 'Descargar carpeta (zip)';
+        zipBtn.setAttribute('aria-label', `Descargar carpeta ${entry.name} como zip`);
+        zipBtn.textContent = '📦';
+        zipBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          downloadZip([{ ref: entry.ref, name: entry.name, type: 'folder' }], `${entry.name}.zip`, zipBtn);
+        });
+        row.appendChild(zipBtn);
+
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'entry-delete';

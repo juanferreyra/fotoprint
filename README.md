@@ -29,6 +29,10 @@ las imágenes en ningún punto del flujo.
 - [x] Miniaturas + vista ampliada de imágenes, y permisos de borrado
       diferenciados para admin/usuario regular (ver
       [Miniaturas, vista ampliada y borrado](#miniaturas-vista-ampliada-y-borrado))
+- [x] Mostrar/ocultar contraseña en los campos de password (ver
+      [Mostrar/ocultar contraseña](#mostrarocultar-contraseña))
+- [x] Descarga zipeada de varios archivos o de una carpeta entera, para el
+      admin (ver [Descarga zipeada (admin)](#descarga-zipeada-admin))
 - [x] Configuración lista para desplegar en Render.com (ver [DEPLOY.md](./DEPLOY.md))
 
 ## Arquitectura
@@ -757,6 +761,66 @@ borrar archivos y (según el rol) carpetas y cuentas de usuario.
   sí mismo (400, y sin botón en la UI). Con Playwright: miniatura visible
   en la lista, click abre el lightbox con la imagen grande, botón ✕ la
   cierra, y el diálogo de confirmación de borrado con su mensaje.
+
+## Mostrar/ocultar contraseña
+
+Los 4 campos de contraseña de la app (login, registro, y las credenciales
+de S3 y FTP en "Conectar almacenamiento") tienen un botón "ojito" para ver
+lo que se esta escribiendo.
+
+- `public/js/passwordToggle.js` (`initPasswordToggles()`): busca todos los
+  botones `.password-toggle` en la página y alterna el `type` del input
+  asociado (por `data-target`, el `id` del input) entre `password` y
+  `text`, cambiando el emoji (👁 / 🙈) y el `aria-label` acorde.
+  Reutilizable: cada campo solo necesita envolverse en un
+  `<div class="password-field">` con el input y el botón adentro, sin
+  lógica nueva por campo.
+
+## Descarga zipeada (admin)
+
+El admin puede seleccionar varios archivos y/o carpetas del explorador y
+bajarlos todos juntos en un `.zip`, o bajar el contenido completo de una
+carpeta con un solo click — sin tener que descargar imagen por imagen.
+
+- **Selección múltiple**: con la cuenta admin aparece un checkbox al lado
+  de cada archivo/carpeta y un checkbox "Seleccionar todo" en la barra de
+  herramientas. Al marcar algo aparece el botón "Descargar seleccion (N)".
+  La selección es solo de la carpeta actual (se vacía sola al navegar a
+  otra) — mezclar selecciones de carpetas distintas en un mismo zip no
+  valía la complejidad extra.
+- **Carpeta entera de un click**: cada carpeta tiene un botón 📦 aparte del
+  de borrar, que arma un zip con todo su contenido (subcarpetas incluidas)
+  sin necesidad de seleccionar nada primero.
+- `POST /api/files/download-zip` (`requireAdmin`, body `{ items: [{ref,
+  name, type}, ...] }`): arma el zip en el servidor con
+  [`archiver`](https://www.npmjs.com/package/archiver) (única dependencia
+  nueva agregada para esto — Node no tiene una forma nativa de armar el
+  *formato* ZIP, a diferencia de gzip que sí trae `node:zlib`) y lo
+  transmite en streaming directo a la respuesta (`archive.pipe(res)`), sin
+  buffer­ear el zip completo en memoria del lado del servidor antes de
+  mandarlo. El frontend (`downloadZip` en `explorer.js`) hace un `fetch`
+  con el body y guarda el `blob` de la respuesta como descarga.
+- **No hizo falta ningún método nuevo por proveedor**: arma el zip
+  recorriendo recursivamente las carpetas con `listFolder` +
+  `downloadFile`, que los cinco `services/*.js` ya implementan — mismo
+  criterio de reuso que en
+  [Descargar archivos](#descargar-archivos). Un item de tipo `folder`
+  dispara una recorrida recursiva (`addFolderToArchive`) que reconstruye
+  la estructura de subcarpetas dentro del zip; un item de tipo `file` se
+  agrega directo.
+  Un archivo que falla a mitad de camino (borrado mientras tanto, error de
+  red) se salta y loguea en el servidor en vez de arruinar el zip entero.
+- Admin-only, mismo criterio que borrar carpetas/cuentas: la ruta tiene
+  `requireAdmin` ademas de `requireAuth`, y los checkboxes + botones 📦 /
+  "Descargar seleccion" solo se renderizan en el frontend si
+  `user.is_admin`.
+- Probado de punta a punta: zip con selección mixta (2 archivos sueltos +
+  1 carpeta con subcarpeta) conserva la estructura de carpetas adentro del
+  zip y el contenido coincide byte a byte con el original (checksum MD5);
+  zip de una sola carpeta con un click; 403 para una cuenta no-admin; 400
+  si no se selecciona nada; y con Playwright, el flujo completo en
+  navegador (seleccionar todo → click en "Descargar seleccion" → evento de
+  descarga real del navegador).
 
 ## Estado del proyecto
 
