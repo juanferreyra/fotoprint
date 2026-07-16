@@ -1,7 +1,9 @@
 import { apiFetch } from './api.js';
 import { initTopbar } from './nav.js';
+import { initFooterYear } from './footer.js';
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'bmp', 'tiff', 'tif', 'svg']);
+const TERMS_ACCEPTED_KEY = 'kodaktienda_terms_accepted';
 
 const ROOT_LABELS = {
   dropbox: 'Mi Dropbox',
@@ -43,6 +45,7 @@ const els = {
   selectAllLabel: document.getElementById('select-all-label'),
   selectAllCheckbox: document.getElementById('select-all-checkbox'),
   downloadSelectedBtn: document.getElementById('download-selected-btn'),
+  termsAcceptCheckbox: document.getElementById('terms-accept-checkbox'),
 };
 
 function showError(message) {
@@ -442,7 +445,28 @@ function createUploadQueueItem(name) {
   return { row, barFill, status };
 }
 
+function termsAccepted() {
+  return els.termsAcceptCheckbox.checked;
+}
+
+function updateUploadLock() {
+  els.uploadZone.classList.toggle('is-locked', !termsAccepted());
+}
+
+els.termsAcceptCheckbox.checked = localStorage.getItem(TERMS_ACCEPTED_KEY) === '1';
+updateUploadLock();
+
+els.termsAcceptCheckbox.addEventListener('change', () => {
+  localStorage.setItem(TERMS_ACCEPTED_KEY, els.termsAcceptCheckbox.checked ? '1' : '0');
+  updateUploadLock();
+});
+
 async function handleFiles(fileList) {
+  if (!termsAccepted()) {
+    showError('Acepta los Terminos y Condiciones para poder subir archivos.');
+    return;
+  }
+
   const files = Array.from(fileList);
   const parent = currentRef;
 
@@ -529,6 +553,7 @@ async function init() {
   }
   isAdmin = Boolean(user.is_admin);
   initTopbar(user.is_admin);
+  initFooterYear();
   await loadConnectionStatus();
 }
 

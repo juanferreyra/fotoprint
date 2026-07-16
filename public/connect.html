@@ -161,12 +161,45 @@
     </form>
   </main>
 
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-col">
+        <a class="brand" href="/home.html">
+          <img src="/img/logo.svg" alt="" width="22" height="22" />
+          <span class="brand-word">Kodak<span class="accent">Tienda</span></span>
+        </a>
+        <p>Servicio de impresion de fotografias y productos fotograficos.</p>
+      </div>
+
+      <div class="footer-col">
+        <h4>Ubicacion</h4>
+        <a class="footer-map-card" href="https://maps.app.goo.gl/uLCuBnVPekXCewGM9?g_st=aw" target="_blank" rel="noopener noreferrer">
+          <span class="footer-map-icon">📍</span>
+          <span class="footer-map-text">
+            <strong>Visitanos</strong>
+            Ver ubicacion en Google Maps
+          </span>
+        </a>
+      </div>
+
+      <div class="footer-col">
+        <h4>Enlaces</h4>
+        <a class="footer-link" href="https://kodaktienda.mitiendanube.com/?exit_preview_theme_installation" target="_blank" rel="noopener noreferrer">🛍️ Tienda online</a>
+        <a class="footer-link is-placeholder" href="#" id="footer-instagram-link" target="_blank" rel="noopener noreferrer">📷 Instagram (agregar enlace)</a>
+        <a class="footer-link" href="/terms.html">📄 Terminos y condiciones</a>
+      </div>
+    </div>
+    <div class="footer-bottom">© <span class="footer-year"></span> KodakTienda. Todos los derechos reservados.</div>
+  </footer>
+
   <script type="module">
     import { apiFetch } from '/js/api.js';
     import { highlightActiveNavLink, applyAdminNavVisibility } from '/js/nav.js';
     import { initPasswordToggles } from '/js/passwordToggle.js';
+    import { initFooterYear } from '/js/footer.js';
 
     initPasswordToggles();
+    initFooterYear();
 
     const PROVIDER_LABELS = {
       dropbox: 'Dropbox',
