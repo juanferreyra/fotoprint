@@ -834,9 +834,8 @@ a.btn-primary-sm {
   color: var(--accent);
 }
 
-.footer-link.is-placeholder {
-  color: var(--muted);
-  font-style: italic;
+.footer-address {
+  margin-bottom: 10px;
 }
 
 .footer-map-card {
