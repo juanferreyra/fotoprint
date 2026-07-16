@@ -3,44 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KodakTienda - Crear cuenta</title>
+  <title>KodakTienda - Terminos y condiciones</title>
   <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
-  <div class="login-bg" id="login-bg"></div>
-  <div class="page-center">
-    <a class="auth-brand" href="/login.html">
-      <img src="/img/logo.svg" alt="" width="34" height="34" />
+  <div class="topbar">
+    <a class="brand" href="/home.html">
+      <img src="/img/logo.svg" alt="" width="28" height="28" />
       <span class="brand-word">Kodak<span class="accent">Tienda</span></span>
     </a>
-    <div class="card">
-      <h1>Crear cuenta</h1>
-      <p class="subtitle">Registrate para conectar tu almacenamiento en la nube.</p>
-
-      <div id="error-box" class="error-box"></div>
-
-      <form id="register-form">
-        <label for="email">Email</label>
-        <input type="email" id="email" name="email" autocomplete="email" required />
-
-        <label for="password">Contrasena</label>
-        <div class="password-field">
-          <input type="password" id="password" name="password" autocomplete="new-password" minlength="8" required />
-          <button type="button" class="password-toggle" data-target="password" aria-label="Mostrar contrasena">👁</button>
-        </div>
-
-        <button type="submit" class="primary" id="submit-btn">Crear cuenta</button>
-      </form>
-
-      <p class="form-footer">Ya tenes cuenta? <a href="/login.html">Iniciar sesion</a></p>
-    </div>
+    <nav class="nav-links">
+      <a href="/home.html">Explorador</a>
+    </nav>
   </div>
+
+  <main class="container terms-content">
+    <h1>Terminos y condiciones del servicio</h1>
+    <p class="updated">Envio, conservacion y eliminacion de archivos digitales</p>
+
+    <p>Al utilizar esta plataforma para cargar imagenes, el usuario reconoce y acepta que Kodak Tienda presta un servicio de impresion de fotografias y productos fotograficos, y que la presente plataforma tiene como unica finalidad facilitar el envio de archivos para su procesamiento e impresion.</p>
+
+    <p>Kodak Tienda es un sitio de impresion de fotos, no de almacenamiento de archivos digitales.</p>
+
+    <p>Los archivos cargados por el usuario seran utilizados exclusivamente para la preparacion, produccion y eventual control de calidad del pedido realizado.</p>
+
+    <p>Una vez que los archivos hayan sido descargados por Kodak Tienda para su procesamiento, podran ser eliminados de nuestros sistemas sin previo aviso. En consecuencia, el usuario comprende y acepta que Kodak Tienda no conservara copias de las imagenes una vez cumplida dicha finalidad, ni asumira obligacion alguna de resguardo, archivo, recuperacion o reposicion de los archivos enviados.</p>
+
+    <p>Es responsabilidad exclusiva del usuario mantener una copia de seguridad (backup) de todas las fotografias e imagenes que cargue en la plataforma. En ningun caso Kodak Tienda sera responsable por la perdida, eliminacion, imposibilidad de recuperacion o falta de disponibilidad de los archivos una vez que estos hayan sido descargados o eliminados conforme al presente procedimiento.</p>
+
+    <p>El usuario declara conocer que esta plataforma constituye unicamente un medio de transferencia de archivos para la ejecucion del servicio contratado y no un servicio de almacenamiento en la nube, custodia, respaldo o conservacion de contenido digital.</p>
+
+    <p>Al cargar sus imagenes y confirmar el envio, el usuario manifiesta haber leido, comprendido y aceptado integramente las presentes condiciones.</p>
+  </main>
 
   <footer class="site-footer">
     <div class="footer-inner">
       <div class="footer-col">
-        <a class="brand" href="/login.html">
+        <a class="brand" href="/home.html">
           <img src="/img/logo.svg" alt="" width="22" height="22" />
           <span class="brand-word">Kodak<span class="accent">Tienda</span></span>
         </a>
@@ -77,40 +77,8 @@
   </footer>
 
   <script type="module">
-    import { apiFetch } from '/js/api.js';
-    import { initAuthBackground } from '/js/authBg.js';
-    import { initPasswordToggles } from '/js/passwordToggle.js';
     import { initFooterYear } from '/js/footer.js';
-
-    initAuthBackground();
-    initPasswordToggles();
     initFooterYear();
-
-    const form = document.getElementById('register-form');
-    const errorBox = document.getElementById('error-box');
-    const submitBtn = document.getElementById('submit-btn');
-
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      errorBox.classList.remove('visible');
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Creando cuenta...';
-
-      try {
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value;
-        await apiFetch('/api/auth/register', {
-          method: 'POST',
-          body: JSON.stringify({ email, password }),
-        });
-        window.location.href = '/home.html';
-      } catch (err) {
-        errorBox.textContent = err.message;
-        errorBox.classList.add('visible');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Crear cuenta';
-      }
-    });
   </script>
 </body>
 </html>
