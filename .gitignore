@@ -1,6 +1,7 @@
 node_modules/
 backend/data/
 backend/.env
+/media/
 *.sqlite
 *.sqlite-journal
 .DS_Store

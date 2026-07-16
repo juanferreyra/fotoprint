@@ -3,19 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>fotoprint</title>
+  <title>KodakTienda</title>
   <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
   <div class="topbar">
-    <a class="brand" href="/index.html">
+    <a class="brand" href="/home.html">
       <img src="/img/logo.svg" alt="" width="28" height="28" />
-      <span class="brand-word">foto<span class="accent">print</span></span>
+      <span class="brand-word">Kodak<span class="accent">Tienda</span></span>
     </a>
     <nav class="nav-links">
-      <a href="/index.html">Explorador</a>
-      <a href="/connect.html">Conectar almacenamiento</a>
+      <a href="/home.html">Explorador</a>
+      <a href="/connect.html" id="connect-nav-link" style="display:none">Conectar almacenamiento</a>
+      <a href="/admin.html" id="admin-nav-link" style="display:none">Administrador</a>
     </nav>
     <div class="topbar-right">
       <a id="provider-badge" class="provider-badge" href="/connect.html"></a>
@@ -35,7 +36,12 @@
     <div id="explorer" style="display:none">
       <div class="explorer-toolbar">
         <nav class="breadcrumb" id="breadcrumb"></nav>
-        <div>
+        <div class="explorer-toolbar-actions">
+          <label class="select-all-label" id="select-all-label" style="display:none">
+            <input type="checkbox" id="select-all-checkbox" />
+            Seleccionar todo
+          </label>
+          <button class="btn-secondary" id="download-selected-btn" type="button" style="display:none">Descargar seleccion</button>
           <button class="btn-primary-sm" id="new-folder-btn" type="button">Nueva carpeta</button>
         </div>
       </div>
@@ -58,6 +64,11 @@
       <div class="entry-list" id="entry-list"></div>
     </div>
   </main>
+
+  <div class="lightbox" id="lightbox" style="display:none">
+    <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Cerrar">✕</button>
+    <img id="lightbox-img" src="" alt="" />
+  </div>
 
   <script type="module" src="/js/explorer.js"></script>
 </body>

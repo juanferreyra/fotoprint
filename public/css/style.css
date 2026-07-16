@@ -4,9 +4,9 @@
   --border: #e1e1e5;
   --text: #1c1c1e;
   --muted: #6b6b70;
-  --accent: #2f6fed;
-  --accent-hover: #2559c4;
-  --accent-soft: #eef4ff;
+  --accent: #ed1c24;
+  --accent-hover: #c1131a;
+  --accent-soft: #fdecec;
   --error: #c62828;
   --success: #1e7e34;
   --radius: 10px;
@@ -33,6 +33,28 @@ body {
   justify-content: center;
   gap: 24px;
   padding: 24px;
+  position: relative;
+}
+
+/* Foto de fondo al azar (public/img/login-bg/), si hay alguna cargada. Sin
+   background-image seteado (carpeta vacia) queda igual que antes: el
+   fondo solido de --bg del body. Va sin z-index negativo a proposito: el
+   background del <body> se "promueve" al canvas de la pagina y se pinta
+   por debajo de cualquier elemento con z-index negativo, asi que un
+   z-index negativo aca dejaria esta capa siempre invisible. Alcanza con
+   que quede primera en el DOM (antes de .page-center) para pintarse detras.*/
+.login-bg {
+  position: fixed;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+.login-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(245, 245, 247, 0.55);
 }
 
 .auth-brand {
@@ -48,11 +70,14 @@ body {
   border-radius: 10px;
 }
 
-.auth-brand .brand-word {
+.brand-word {
   font-weight: 700;
-  font-size: 1.4rem;
   color: var(--text);
   letter-spacing: -0.02em;
+}
+
+.auth-brand .brand-word {
+  font-size: 1.4rem;
 }
 
 .brand-word .accent {
@@ -105,6 +130,35 @@ input[type="text"]:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.password-field {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.password-field input[type="password"],
+.password-field input[type="text"] {
+  margin-bottom: 0;
+  padding-right: 42px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 6px 8px;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  color: var(--text);
 }
 
 button {
@@ -244,7 +298,7 @@ button.primary:disabled {
 }
 
 .provider-badge:hover {
-  background: #dfebff;
+  background: #fbdada;
 }
 
 .topbar .user-email {
@@ -307,6 +361,35 @@ main.container h2 {
   gap: 12px;
   flex-wrap: wrap;
   margin: 16px 0;
+}
+
+.explorer-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.select-all-label input {
+  margin: 0;
+  width: auto;
+}
+
+.entry-select {
+  flex-shrink: 0;
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }
 
 .breadcrumb {
@@ -461,6 +544,16 @@ main.container h2 {
   flex-shrink: 0;
 }
 
+.entry-thumb {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
 .entry-name {
   flex: 1;
   overflow: hidden;
@@ -472,6 +565,79 @@ main.container h2 {
   color: var(--muted);
   font-size: 0.8rem;
   flex-shrink: 0;
+}
+
+.entry-download {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 1rem;
+}
+
+.entry-download:hover {
+  background: var(--accent-soft);
+}
+
+.entry-delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: none;
+  color: var(--error);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.entry-delete:hover {
+  background: #fdecea;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.lightbox img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .empty-state {

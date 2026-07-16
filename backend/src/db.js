@@ -34,3 +34,14 @@ function migrateDropProviderCheckConstraint() {
 }
 
 migrateDropProviderCheckConstraint();
+
+// Migracion para bases creadas antes de agregar la columna is_admin.
+function migrateAddIsAdminColumn() {
+  const columns = db.prepare("PRAGMA table_info(users)").all();
+  const hasIsAdmin = columns.some((col) => col.name === 'is_admin');
+  if (hasIsAdmin) return;
+
+  db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+}
+
+migrateAddIsAdminColumn();

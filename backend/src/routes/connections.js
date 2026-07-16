@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/requireAdmin.js';
 import {
   listConnections,
   activateConnection,
@@ -12,16 +13,24 @@ import * as dropbox from '../services/dropbox.js';
 import * as googleDrive from '../services/googleDrive.js';
 import * as s3 from '../services/s3.js';
 import * as ftp from '../services/ftp.js';
+import * as local from '../services/local.js';
 
 export const connectionsRouter = Router();
 
-const PROVIDERS = new Set(['dropbox', 'google_drive', 's3', 'ftp']);
+const PROVIDERS = new Set(['dropbox', 'google_drive', 's3', 'ftp', 'local']);
 
 connectionsRouter.use(requireAuth);
 
+// GET / (que conexion esta activa) sigue disponible para cualquier usuario
+// autenticado: el topbar y el explorador la necesitan para saber que
+// mostrar, y ya esta scopeada a su propio user_id (no expone conexiones de
+// otras cuentas). El resto de la pantalla "Conectar almacenamiento" —
+// activar/borrar/crear conexiones — es solo para la cuenta admin.
 connectionsRouter.get('/', (req, res) => {
   res.json({ connections: listConnections(req.session.userId) });
 });
+
+connectionsRouter.use(requireAdmin);
 
 connectionsRouter.post('/:provider/activate', (req, res) => {
   const { provider } = req.params;
@@ -122,7 +131,7 @@ connectionsRouter.get('/google_drive/callback', async (req, res) => {
     const tokens = await googleDrive.exchangeCodeForToken(code);
     if (!tokens.refresh_token) {
       return res.redirect(
-        `/connect.html?error=${encodeURIComponent('Google no devolvio un refresh token. Revoca el acceso de fotoprint en myaccount.google.com/permissions y proba de nuevo.')}`
+        `/connect.html?error=${encodeURIComponent('Google no devolvio un refresh token. Revoca el acceso de KodakTienda en myaccount.google.com/permissions y proba de nuevo.')}`
       );
     }
 
@@ -208,6 +217,22 @@ connectionsRouter.post('/ftp', async (req, res) => {
   // conexion nueva en cada operacion), asi que reconectar con credenciales
   // distintas no deja nada desactualizado para invalidar.
   saveConnection(req.session.userId, 'ftp', `${credentials.user}@${credentials.host}`, credentials);
+
+  res.status(201).json({ connections: listConnections(req.session.userId) });
+});
+
+// --- Carpeta local del proyecto (sin credenciales) ---
+
+connectionsRouter.post('/local', async (req, res) => {
+  try {
+    // No hay nada que "probar" salvo que se pueda crear la carpeta base en
+    // disco (permisos del filesystem donde corre el servidor).
+    await local.testCredentials();
+  } catch (err) {
+    return res.status(err.httpStatus || 502).json({ error: err.message });
+  }
+
+  saveConnection(req.session.userId, 'local', local.ACCOUNT_LABEL, {});
 
   res.status(201).json({ connections: listConnections(req.session.userId) });
 });

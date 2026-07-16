@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>fotoprint - Conectar almacenamiento</title>
+  <title>KodakTienda - Conectar almacenamiento</title>
   <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
   <link rel="stylesheet" href="/css/style.css" />
   <style>
@@ -80,13 +80,14 @@
 </head>
 <body>
   <div class="topbar">
-    <a class="brand" href="/index.html">
+    <a class="brand" href="/home.html">
       <img src="/img/logo.svg" alt="" width="28" height="28" />
-      <span class="brand-word">foto<span class="accent">print</span></span>
+      <span class="brand-word">Kodak<span class="accent">Tienda</span></span>
     </a>
     <nav class="nav-links">
-      <a href="/index.html">Explorador</a>
-      <a href="/connect.html">Conectar almacenamiento</a>
+      <a href="/home.html">Explorador</a>
+      <a href="/connect.html" id="connect-nav-link" style="display:none">Conectar almacenamiento</a>
+      <a href="/admin.html" id="admin-nav-link" style="display:none">Administrador</a>
     </nav>
     <div class="topbar-right">
       <a id="provider-badge" class="provider-badge" href="/connect.html"></a>
@@ -97,7 +98,7 @@
 
   <main class="container">
     <h2>Conectar almacenamiento</h2>
-    <p>Elegi el proveedor de nube donde queres subir y explorar tus imagenes. Podes tener varios conectados y elegir cual usar.</p>
+    <p>Elegi donde queres subir y explorar tus imagenes: un proveedor de nube, o la carpeta local del proyecto. Podes tener varios conectados y elegir cual usar.</p>
 
     <div id="error-box" class="error-box"></div>
     <div id="success-box" class="success-box" style="display:none"></div>
@@ -112,7 +113,10 @@
       <input type="text" id="s3-access-key" autocomplete="off" required />
 
       <label for="s3-secret-key">Secret Access Key</label>
-      <input type="password" id="s3-secret-key" autocomplete="off" required />
+      <div class="password-field">
+        <input type="password" id="s3-secret-key" autocomplete="off" required />
+        <button type="button" class="password-toggle" data-target="s3-secret-key" aria-label="Mostrar contrasena">👁</button>
+      </div>
 
       <label for="s3-bucket">Bucket</label>
       <input type="text" id="s3-bucket" placeholder="mi-bucket-fotos" required />
@@ -140,7 +144,10 @@
       <input type="text" id="ftp-user" autocomplete="off" required />
 
       <label for="ftp-password">Contrasena</label>
-      <input type="password" id="ftp-password" autocomplete="off" required />
+      <div class="password-field">
+        <input type="password" id="ftp-password" autocomplete="off" required />
+        <button type="button" class="password-toggle" data-target="ftp-password" aria-label="Mostrar contrasena">👁</button>
+      </div>
 
       <label class="checkbox-label">
         <input type="checkbox" id="ftp-secure" />
@@ -156,13 +163,17 @@
 
   <script type="module">
     import { apiFetch } from '/js/api.js';
-    import { highlightActiveNavLink } from '/js/nav.js';
+    import { highlightActiveNavLink, applyAdminNavVisibility } from '/js/nav.js';
+    import { initPasswordToggles } from '/js/passwordToggle.js';
+
+    initPasswordToggles();
 
     const PROVIDER_LABELS = {
       dropbox: 'Dropbox',
       google_drive: 'Google Drive',
       s3: 'Amazon S3',
       ftp: 'FTP',
+      local: 'Carpeta local (media/ del proyecto)',
     };
 
     const listEl = document.getElementById('provider-list');
@@ -204,7 +215,7 @@
       const byProvider = Object.fromEntries(connections.map((c) => [c.provider, c]));
       listEl.innerHTML = '';
 
-      for (const provider of ['dropbox', 'google_drive', 's3', 'ftp']) {
+      for (const provider of ['dropbox', 'google_drive', 's3', 'ftp', 'local']) {
         const conn = byProvider[provider];
         const card = document.createElement('div');
         card.className = 'provider-card';
@@ -245,6 +256,13 @@
             btn.textContent = 'Conectar';
             btn.addEventListener('click', () => toggleForm(provider === 's3' ? s3Form : ftpForm));
             actions.appendChild(btn);
+          } else if (provider === 'local') {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn-primary-sm';
+            btn.textContent = 'Usar carpeta local';
+            btn.addEventListener('click', () => connectLocal(btn));
+            actions.appendChild(btn);
           }
         } else {
           if (!conn.is_active) {
@@ -277,6 +295,19 @@
         render(connections);
       } catch (err) {
         showError(err.message);
+      }
+    }
+
+    async function connectLocal(btn) {
+      errorBox.classList.remove('visible');
+      btn.disabled = true;
+      try {
+        const { connections } = await apiFetch('/api/connections/local', { method: 'POST' });
+        render(connections);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
       }
     }
 
@@ -355,14 +386,22 @@
     });
 
     async function init() {
+      let user;
       try {
-        const { user } = await apiFetch('/api/auth/me');
+        ({ user } = await apiFetch('/api/auth/me'));
         document.getElementById('user-email').textContent = user.email;
       } catch {
         window.location.href = '/login.html';
         return;
       }
+
+      if (!user.is_admin) {
+        window.location.href = '/home.html';
+        return;
+      }
+
       highlightActiveNavLink();
+      applyAdminNavVisibility(user.is_admin);
 
       const params = new URLSearchParams(window.location.search);
       if (params.get('error')) {

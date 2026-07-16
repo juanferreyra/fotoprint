@@ -1,6 +1,12 @@
 import { apiFetch } from './api.js';
 
-const PROVIDER_LABELS = { dropbox: 'Dropbox', google_drive: 'Google Drive', s3: 'Amazon S3' };
+const PROVIDER_LABELS = {
+  dropbox: 'Dropbox',
+  google_drive: 'Google Drive',
+  s3: 'Amazon S3',
+  ftp: 'FTP',
+  local: 'Carpeta local',
+};
 
 export function highlightActiveNavLink() {
   const path = window.location.pathname;
@@ -26,7 +32,20 @@ export async function renderProviderBadge() {
   }
 }
 
-export function initTopbar() {
+// "Conectar almacenamiento" y "Administrador" son solo para la cuenta
+// admin: un usuario regular ya tiene su carpeta local asignada sola al
+// registrarse y no necesita (ni puede) tocar la configuracion de
+// almacenamiento.
+export function applyAdminNavVisibility(isAdmin) {
+  const adminLink = document.getElementById('admin-nav-link');
+  if (adminLink) adminLink.style.display = isAdmin ? '' : 'none';
+
+  const connectLink = document.getElementById('connect-nav-link');
+  if (connectLink) connectLink.style.display = isAdmin ? '' : 'none';
+}
+
+export function initTopbar(isAdmin) {
   highlightActiveNavLink();
   renderProviderBadge();
+  applyAdminNavVisibility(isAdmin);
 }

@@ -16,8 +16,17 @@ export const config = {
   port: Number(process.env.PORT || 3000),
   baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
   databaseFile: path.resolve(backendRoot, process.env.DATABASE_FILE || './data/fotoprint.sqlite'),
+  // Carpeta usada por el proveedor "local" (services/local.js). Por
+  // defecto es media/ en la raiz del proyecto (un nivel arriba de backend/),
+  // no dentro de backend/, para que quede claro que es contenido del
+  // usuario y no parte del codigo del servidor.
+  mediaDir: path.resolve(backendRoot, process.env.MEDIA_DIR || '../media'),
   sessionSecret: required('SESSION_SECRET'),
   tokenEncryptionKey: required('TOKEN_ENCRYPTION_KEY'),
+  // Cuenta que se marca como administradora al registrarse o iniciar sesion
+  // (ver routes/auth.js). Opcional: sin esta variable, no hay ninguna
+  // cuenta admin y la pantalla de administracion queda inaccesible.
+  adminEmail: (process.env.ADMIN_EMAIL || '').trim().toLowerCase(),
   dropbox: {
     appKey: process.env.DROPBOX_APP_KEY || '',
     appSecret: process.env.DROPBOX_APP_SECRET || '',

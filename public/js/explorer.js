@@ -8,6 +8,7 @@ const ROOT_LABELS = {
   google_drive: 'Mi Drive',
   s3: 'Bucket S3',
   ftp: 'Servidor FTP',
+  local: 'Carpeta local',
 };
 
 // "ref" es opaco por proveedor (path para Dropbox, id de archivo para
@@ -16,6 +17,11 @@ const ROOT_LABELS = {
 // medida que el usuario entra/sale de carpetas.
 let breadcrumbStack = [{ ref: '', name: 'Raiz' }];
 let currentRef = '';
+let isAdmin = false;
+// ref -> { ref, name, type }. Se vacia cada vez que se cambia de carpeta
+// (seleccionar cosas de carpetas distintas para un mismo zip no vale la
+// pena la complejidad extra que agregaria).
+let selectedEntries = new Map();
 
 const els = {
   noConnection: document.getElementById('no-connection'),
@@ -31,6 +37,12 @@ const els = {
   uploadInput: document.getElementById('upload-input'),
   uploadSelectBtn: document.getElementById('upload-select-btn'),
   uploadQueue: document.getElementById('upload-queue'),
+  lightbox: document.getElementById('lightbox'),
+  lightboxImg: document.getElementById('lightbox-img'),
+  lightboxClose: document.getElementById('lightbox-close'),
+  selectAllLabel: document.getElementById('select-all-label'),
+  selectAllCheckbox: document.getElementById('select-all-checkbox'),
+  downloadSelectedBtn: document.getElementById('download-selected-btn'),
 };
 
 function showError(message) {
@@ -43,10 +55,109 @@ function clearError() {
   els.errorBox.textContent = '';
 }
 
-function fileIcon(name) {
+function isImage(name) {
   const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
-  return IMAGE_EXTENSIONS.has(ext) ? '\u{1F5BC}️' : '\u{1F4C4}';
+  return IMAGE_EXTENSIONS.has(ext);
 }
+
+// inline=1 le pide al servidor Content-Type/Content-Disposition para mostrar
+// la imagen en la pagina (miniatura, lightbox) en vez de forzar la descarga.
+function fileUrl(entry, inline) {
+  const params = new URLSearchParams({ ref: entry.ref, name: entry.name });
+  if (inline) params.set('inline', '1');
+  return `/api/files/download?${params.toString()}`;
+}
+
+function openLightbox(entry) {
+  els.lightboxImg.src = fileUrl(entry, true);
+  els.lightboxImg.alt = entry.name;
+  els.lightbox.style.display = 'flex';
+}
+
+function closeLightbox() {
+  els.lightbox.style.display = 'none';
+  els.lightboxImg.src = '';
+}
+
+els.lightbox.addEventListener('click', closeLightbox);
+els.lightboxClose.addEventListener('click', closeLightbox);
+els.lightboxImg.addEventListener('click', (event) => event.stopPropagation());
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeLightbox();
+});
+
+function updateSelectionUI() {
+  const count = selectedEntries.size;
+  els.downloadSelectedBtn.textContent = `Descargar seleccion (${count})`;
+  els.downloadSelectedBtn.style.display = count > 0 ? '' : 'none';
+}
+
+function toggleSelection(entry, checked) {
+  if (checked) selectedEntries.set(entry.ref, entry);
+  else selectedEntries.delete(entry.ref);
+  updateSelectionUI();
+}
+
+// No hay forma nativa de armar un zip en el navegador ni en Node sin una
+// libreria (a diferencia de gzip, que si trae node:zlib), asi que esto pega
+// contra /api/files/download-zip (que arma el zip en el servidor con
+// "archiver") y descarga el blob resultante.
+async function downloadZip(items, filename, btn) {
+  clearError();
+  const originalText = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Generando zip...';
+  }
+
+  try {
+    const res = await fetch('/api/files/download-zip', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+
+    if (!res.ok) {
+      let message = `Error ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data?.error) message = data.error;
+      } catch {
+        // sin cuerpo JSON legible, nos quedamos con el mensaje generico
+      }
+      throw new Error(message);
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+}
+
+els.selectAllCheckbox.addEventListener('change', () => {
+  document.querySelectorAll('.entry-select').forEach((checkbox) => {
+    checkbox.checked = els.selectAllCheckbox.checked;
+    checkbox.dispatchEvent(new Event('change'));
+  });
+});
+
+els.downloadSelectedBtn.addEventListener('click', () => {
+  downloadZip(Array.from(selectedEntries.values()), 'descarga.zip', els.downloadSelectedBtn);
+});
 
 function formatSize(bytes) {
   if (bytes === undefined || bytes === null) return '';
@@ -86,6 +197,12 @@ function renderBreadcrumb(stack) {
 
 function renderEntries(entries) {
   els.entryList.innerHTML = '';
+  selectedEntries.clear();
+  updateSelectionUI();
+  els.selectAllCheckbox.checked = false;
+  // Seleccionar varias cosas y bajarlas juntas en un zip es solo para el
+  // admin (mismo criterio que borrar carpetas/cuentas).
+  els.selectAllLabel.style.display = isAdmin && entries.length > 0 ? '' : 'none';
 
   if (entries.length === 0) {
     const empty = document.createElement('div');
@@ -99,10 +216,30 @@ function renderEntries(entries) {
     const row = document.createElement('div');
     row.className = entry.type === 'folder' ? 'entry-row is-folder' : 'entry-row';
 
-    const icon = document.createElement('span');
-    icon.className = 'entry-icon';
-    icon.textContent = entry.type === 'folder' ? '\u{1F4C1}' : fileIcon(entry.name);
-    row.appendChild(icon);
+    if (isAdmin) {
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'entry-select';
+      checkbox.setAttribute('aria-label', `Seleccionar ${entry.name}`);
+      checkbox.addEventListener('click', (event) => event.stopPropagation());
+      checkbox.addEventListener('change', () => toggleSelection(entry, checkbox.checked));
+      row.appendChild(checkbox);
+    }
+
+    if (entry.type === 'file' && isImage(entry.name)) {
+      const thumb = document.createElement('img');
+      thumb.className = 'entry-thumb';
+      thumb.src = fileUrl(entry, true);
+      thumb.alt = entry.name;
+      thumb.loading = 'lazy';
+      thumb.addEventListener('click', () => openLightbox(entry));
+      row.appendChild(thumb);
+    } else {
+      const icon = document.createElement('span');
+      icon.className = 'entry-icon';
+      icon.textContent = entry.type === 'folder' ? '\u{1F4C1}' : '\u{1F4C4}';
+      row.appendChild(icon);
+    }
 
     const name = document.createElement('span');
     name.className = 'entry-name';
@@ -114,6 +251,23 @@ function renderEntries(entries) {
       size.className = 'entry-size';
       size.textContent = formatSize(entry.size);
       row.appendChild(size);
+
+      const downloadLink = document.createElement('a');
+      downloadLink.className = 'entry-download';
+      downloadLink.href = fileUrl(entry, false);
+      downloadLink.title = 'Descargar';
+      downloadLink.setAttribute('aria-label', `Descargar ${entry.name}`);
+      downloadLink.textContent = '⬇';
+      row.appendChild(downloadLink);
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'entry-delete';
+      deleteBtn.title = 'Eliminar';
+      deleteBtn.setAttribute('aria-label', `Eliminar ${entry.name}`);
+      deleteBtn.textContent = '🗑';
+      deleteBtn.addEventListener('click', () => deleteEntry(entry));
+      row.appendChild(deleteBtn);
     }
 
     if (entry.type === 'folder') {
@@ -121,9 +275,51 @@ function renderEntries(entries) {
         const newStack = [...breadcrumbStack, { ref: entry.ref, name: entry.name }];
         loadFolder(entry.ref, newStack);
       });
+
+      // Borrar y descargar carpetas enteras es solo para el admin (un
+      // usuario regular puede borrar fotos de su propia carpeta, pero no
+      // carpetas enteras).
+      if (isAdmin) {
+        const zipBtn = document.createElement('button');
+        zipBtn.type = 'button';
+        zipBtn.className = 'entry-download';
+        zipBtn.title = 'Descargar carpeta (zip)';
+        zipBtn.setAttribute('aria-label', `Descargar carpeta ${entry.name} como zip`);
+        zipBtn.textContent = '📦';
+        zipBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          downloadZip([{ ref: entry.ref, name: entry.name, type: 'folder' }], `${entry.name}.zip`, zipBtn);
+        });
+        row.appendChild(zipBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'entry-delete';
+        deleteBtn.title = 'Eliminar carpeta';
+        deleteBtn.setAttribute('aria-label', `Eliminar carpeta ${entry.name}`);
+        deleteBtn.textContent = '🗑';
+        deleteBtn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          deleteEntry(entry);
+        });
+        row.appendChild(deleteBtn);
+      }
     }
 
     els.entryList.appendChild(row);
+  }
+}
+
+async function deleteEntry(entry) {
+  const label = entry.type === 'folder' ? `la carpeta "${entry.name}" y todo su contenido` : `"${entry.name}"`;
+  if (!window.confirm(`¿Eliminar ${label}? Esta accion no se puede deshacer.`)) return;
+
+  try {
+    const endpoint = entry.type === 'folder' ? '/api/files/folders' : '/api/files';
+    await apiFetch(`${endpoint}?ref=${encodeURIComponent(entry.ref)}`, { method: 'DELETE' });
+    await loadFolder(currentRef);
+  } catch (err) {
+    showError(err.message);
   }
 }
 
@@ -323,14 +519,16 @@ async function loadConnectionStatus() {
 }
 
 async function init() {
+  let user;
   try {
-    const { user } = await apiFetch('/api/auth/me');
+    ({ user } = await apiFetch('/api/auth/me'));
     document.getElementById('user-email').textContent = user.email;
   } catch {
     window.location.href = '/login.html';
     return;
   }
-  initTopbar();
+  isAdmin = Boolean(user.is_admin);
+  initTopbar(user.is_admin);
   await loadConnectionStatus();
 }
 

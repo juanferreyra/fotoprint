@@ -1,9 +1,10 @@
-# fotoprint
+# KodakTienda
 
 Aplicación web liviana para subir y explorar imágenes en la nube del propio usuario
-(Google Drive, Dropbox, Amazon S3 o un servidor FTP propio), sin almacenamiento
-permanente en el servidor y sin recomprimir ni recodificar las imágenes en ningún
-punto del flujo.
+(Google Drive, Dropbox, Amazon S3 o un servidor FTP propio) o en una carpeta local
+dentro del propio proyecto, sin almacenamiento permanente adicional en el servidor
+(salvo la carpeta local, si se elige esa opción) y sin recomprimir ni recodificar
+las imágenes en ningún punto del flujo.
 
 ## Estado actual
 
@@ -18,6 +19,20 @@ punto del flujo.
       real (ver sección [Amazon S3](#conexión-con-amazon-s3-sin-oauth))
 - [x] Conexión + navegador de archivos + subida (FTP) — probado y
       funcionando contra un servidor real
+- [x] Carpeta local del proyecto (`media/`) como proveedor sin credenciales —
+      probado de punta a punta (ver [Carpeta local del proyecto](#carpeta-local-del-proyecto-sin-credenciales))
+- [x] Descargar archivos desde el explorador (ver [Descargar archivos](#descargar-archivos))
+- [x] Fondos variados en el login/registro (ver [Fondos variados en el login](#fondos-variados-en-el-login))
+- [x] Cuenta administradora: lista de usuarios, reseteo de contraseñas y
+      acceso a la carpeta local de todos los usuarios (ver
+      [Cuenta administradora](#cuenta-administradora))
+- [x] Miniaturas + vista ampliada de imágenes, y permisos de borrado
+      diferenciados para admin/usuario regular (ver
+      [Miniaturas, vista ampliada y borrado](#miniaturas-vista-ampliada-y-borrado))
+- [x] Mostrar/ocultar contraseña en los campos de password (ver
+      [Mostrar/ocultar contraseña](#mostrarocultar-contraseña))
+- [x] Descarga zipeada de varios archivos o de una carpeta entera, para el
+      admin (ver [Descarga zipeada (admin)](#descarga-zipeada-admin))
 - [x] Configuración lista para desplegar en Render.com (ver [DEPLOY.md](./DEPLOY.md))
 
 ## Arquitectura
@@ -31,11 +46,15 @@ fotoprint/
       db.js                 # conexión SQLite (better-sqlite3) + migración de schema
       db/schema.sql         # definición de tablas
       middleware/auth.js    # requireAuth (guard de sesión)
+      middleware/requireAdmin.js # requireAdmin (guard de cuenta admin, va despues de requireAuth)
       routes/auth.js        # /api/auth/register, /login, /logout, /me
       routes/connections.js # /api/connections (listar/activar/borrar) + OAuth de Dropbox y Google Drive
-      routes/files.js       # /api/files, /api/files/folders, /api/files/upload
+      routes/files.js       # /api/files, /api/files/folders, /api/files/upload, /api/files/download
                              # (generico: despacha a services/dropbox.js o services/googleDrive.js
                              # segun cual sea el proveedor activo del usuario)
+      routes/loginBackground.js # /api/login-background (publica, sin auth): elige una foto al azar
+                             # de public/img/login-bg/ para el fondo de login/registro
+      routes/admin.js        # /api/admin/users (listar) y /api/admin/users/:id/reset-password
       services/users.js     # acceso a la tabla users + bcrypt
       services/crypto.js    # cifrado AES-256-GCM de credenciales de nube
       services/connections.js # acceso a la tabla cloud_connections
@@ -44,16 +63,24 @@ fotoprint/
       services/googleDrive.js # OAuth2 (googleapis), Drive API v3, misma interfaz que dropbox.js
       services/s3.js         # @aws-sdk/client-s3, misma interfaz, sin OAuth (credenciales de larga duracion)
       services/ftp.js        # basic-ftp, misma interfaz, sin cachear conexion (una nueva por operacion)
+      services/local.js      # fs/promises, misma interfaz, sin credenciales (guarda en config.mediaDir)
     data/                    # SQLite en disco (gitignored)
     .env.example
+  media/                     # carpeta usada por el proveedor "local" (gitignored, una subcarpeta por usuario)
   public/                    # frontend estático, vanilla JS (sin build step)
-    index.html               # navegador de archivos (o mensaje "conectar" si no hay proveedor activo)
+    home.html                # navegador de archivos (o mensaje "conectar" si no hay proveedor activo)
+                             # se llama home.html (no index.html) para no chocar con el index.html
+                             # propio que algunos paneles de hosting (ej. Hestia) sirven por delante
+                             # del proxy en la raiz del dominio
     connect.html              # pantalla "Conectar almacenamiento"
+    admin.html                # pantalla de administracion (solo visible para la cuenta admin)
     login.html
     register.html
     css/style.css
+    img/login-bg/             # fotos de fondo para login/registro (opcional, ver mas abajo)
     js/api.js                # helper fetch con manejo de errores
-    js/explorer.js            # logica del navegador de archivos (breadcrumbs, listar, crear carpeta)
+    js/authBg.js               # pide /api/login-background y setea el fondo si hay alguna foto
+    js/explorer.js            # logica del navegador de archivos (breadcrumbs, listar, crear carpeta, descargar)
 ```
 
 ### Decisiones de arquitectura
@@ -62,8 +89,11 @@ fotoprint/
 - **Frontend**: HTML + JS vanilla (ES modules), servido como estático por Express
   desde `public/`. Sin bundler ni framework, para mantener el proyecto liviano.
 - **Autenticación**: sesiones de servidor (`express-session`) con cookie
-  `httpOnly`, `sameSite=lax` y `secure` cuando `BASE_URL` es https. La sesión se
-  persiste en la misma base SQLite (tabla `sessions`, creada automáticamente por
+  `httpOnly`, `sameSite=lax` y `secure: 'auto'` (usa `req.secure` por request,
+  que respeta `trust proxy` + el header `X-Forwarded-Proto` — con un booleano
+  fijo, un proxy que no mande ese header hace que la cookie de sesion
+  directamente no se mande y el login "rebote"). La sesión se persiste en la
+  misma base SQLite (tabla `sessions`, creada automáticamente por
   `better-sqlite3-session-store`). Se eligió por sobre JWT porque frontend y
   backend viven en el mismo origen y evita el riesgo de robo de token vía XSS.
 - **Base de datos**: SQLite vía `better-sqlite3` (síncrono, sin overhead de
@@ -76,18 +106,19 @@ fotoprint/
   RAM, nunca se escribe a disco) y se van a mandar tal cual al SDK del
   proveedor. No hay ninguna librería de procesamiento de imágenes (sharp, jimp,
   canvas) en el proyecto.
-- **Multi-proveedor (Dropbox / Google Drive / S3 / FTP)**: `routes/files.js`
-  no sabe nada de ningún proveedor puntual — despacha según
-  `connection.provider` a un módulo de `services/` que implementa siempre la
-  misma interfaz (`listFolder`, `createFolder`, `uploadFile`, `deleteFile`).
-  La API HTTP usa un `ref` opaco por proveedor en vez de un path real: para
-  Dropbox y FTP el `ref` es literalmente el path (`/Fotos/Playa`, ambos
-  tienen carpetas reales), para Drive es el `id` del archivo/carpeta (Drive
-  no tiene paths reales — un mismo nombre de carpeta puede repetirse, así
-  que solo el `id` identifica un recurso sin ambigüedad), y para S3 es la
-  key/prefix del objeto (S3 tampoco tiene carpetas reales — se simulan con
-  objetos vacíos cuya key termina en `/`, y se listan con `Delimiter: '/'`
-  para separar "carpetas" de "archivos"). La raíz siempre es `ref = ''`.
+- **Multi-proveedor (Dropbox / Google Drive / S3 / FTP / local)**:
+  `routes/files.js` no sabe nada de ningún proveedor puntual — despacha
+  según `connection.provider` a un módulo de `services/` que implementa
+  siempre la misma interfaz (`listFolder`, `createFolder`, `uploadFile`,
+  `deleteFile`). La API HTTP usa un `ref` opaco por proveedor en vez de un
+  path real: para Dropbox, FTP y local el `ref` es literalmente el path
+  (`/Fotos/Playa`, los tres tienen carpetas reales), para Drive es el `id`
+  del archivo/carpeta (Drive no tiene paths reales — un mismo nombre de
+  carpeta puede repetirse, así que solo el `id` identifica un recurso sin
+  ambigüedad), y para S3 es la key/prefix del objeto (S3 tampoco tiene
+  carpetas reales — se simulan con objetos vacíos cuya key termina en `/`,
+  y se listan con `Delimiter: '/'` para separar "carpetas" de "archivos").
+  La raíz siempre es `ref = ''`.
   La columna `cloud_connections.provider` no tiene un `CHECK` con la lista
   de proveedores válidos (se validan en la capa de aplicación) — así,
   agregar un proveedor nuevo no necesita una migración de base de datos.
@@ -185,7 +216,7 @@ despacha internamente según `connection.provider`:
   (`toFriendlyError` en `services/dropbox.js` / `services/googleDrive.js`).
   Un 401 invalida el `access_token` cacheado para forzar un refresh en el
   próximo pedido.
-- Frontend (`index.html` + `js/explorer.js`): breadcrumb clickeable (pila
+- Frontend (`home.html` + `js/explorer.js`): breadcrumb clickeable (pila
   `{ref, name}` armada en el cliente, no parsea el `ref` como path), ícono
   de carpeta / ícono genérico de imagen (por extensión) / ícono genérico de
   archivo — sin pedir thumbnails a la API para mantenerlo liviano —, tamaño
@@ -213,7 +244,7 @@ y Playwright, para ambos proveedores:
   interceptación de red en Playwright.
 
 Como vos ya tenés Dropbox funcionando en tu máquina, para probarlo de punta
-a punta: `cd backend && npm run dev`, entrá a `http://localhost:3000/index.html`
+a punta: `cd backend && npm run dev`, entrá a `http://localhost:3000/home.html`
 logueado, y deberías ver las carpetas/archivos reales. Fijate en particular
 que la navegación entre carpetas y "Nueva carpeta" sigan funcionando igual
 que antes (este paso tocó el contrato interno de la API, aunque el
@@ -273,7 +304,7 @@ Mismo patrón que Dropbox, con `services/googleDrive.js` (usa `googleapis`):
    agregaste como test user
 4. Deberías volver a `/connect.html?connected=google_drive` con la card en
    estado "Activo" y tu email de Gmail como `account_label`
-5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador de
+5. Andá a `http://localhost:3000/home.html` — deberías ver el navegador de
    archivos apuntando a "Mi Drive" con tus carpetas/archivos reales
 
 Al igual que con Dropbox, no pude probar el login real contra
@@ -370,7 +401,7 @@ Ya que no tenés todavía un bucket real, dejo la guía para cuando lo tengas:
    Key/Secret/bucket/región del paso anterior, click en **Conectar**
 4. Si las credenciales son válidas vas a ver la card en estado "Activo"
    inmediatamente (no hay redirect de por medio)
-5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador de
+5. Andá a `http://localhost:3000/home.html` — deberías ver el navegador de
    archivos apuntando al bucket
 
 **Nota sobre las pruebas de este paso**: a diferencia de Dropbox y Google
@@ -450,7 +481,7 @@ Mismo patrón que S3 (formulario de credenciales, sin OAuth), con
    (y marcá FTPS si tu hosting lo soporta)
 4. Si las credenciales son válidas vas a ver la card en estado "Activo"
    inmediatamente
-5. Andá a `http://localhost:3000/index.html` — deberías ver el navegador
+5. Andá a `http://localhost:3000/home.html` — deberías ver el navegador
    de archivos apuntando a la raíz de tu cuenta FTP
 
 **Nota sobre las pruebas de este paso**: este sandbox **no tiene salida de
@@ -479,16 +510,329 @@ ni un solo intento de conexión real. Sí probé:
 **Confirmado por el usuario contra un servidor FTP real**: conexión,
 listado de la carpeta raíz, y el flujo funcionando de punta a punta.
 
+## Carpeta local del proyecto (sin credenciales)
+
+A pedido tuyo, se agregó un quinto proveedor para guardar las fotos
+directamente en disco, en una carpeta `media/` dentro del proyecto, sin
+necesidad de configurar ninguna cuenta de nube. Pensado como opción por
+defecto simple para correr la app localmente o en un servidor propio sin
+depender de terceros.
+
+- `services/local.js` implementa la misma interfaz que los demás
+  proveedores (`listFolder`, `createFolder`, `uploadFile`, `deleteFile`)
+  usando `fs/promises` en vez de un SDK externo. No hay credenciales que
+  guardar: la conexión se crea con `encrypted_credentials = '{}'` cifrado,
+  solo para poder reusar la misma tabla `cloud_connections` sin agregar una
+  columna nullable.
+- **Carpeta base configurable**: `config.mediaDir` (`MEDIA_DIR` en
+  `backend/.env`, default `../media` = `media/` en la raíz del proyecto,
+  no dentro de `backend/`, para que quede claro que es contenido del
+  usuario y no parte del código del servidor). Se crea sola con
+  `fs.mkdir(..., { recursive: true })` la primera vez que se usa, igual que
+  `backend/data/` para la base SQLite. Está en `.gitignore` (`/media/`).
+- **Aislamiento por usuario**: dentro de `mediaDir`, cada usuario tiene su
+  propia subcarpeta `user-<id>`, para que si dos usuarios distintos usan
+  "local" en el mismo despliegue no compartan ni pisen archivos entre sí.
+- **Path traversal**: `routes/files.js` ya rechaza cualquier `ref` que
+  contenga `..` antes de que llegue a ningún proveedor. `services/local.js`
+  agrega una segunda barrera propia (resuelve el path absoluto y verifica
+  que siga adentro de la carpeta del usuario) por si el módulo se llega a
+  usar desde otro lado sin pasar por esa validación.
+- `POST /api/connections/local`: no pide ningún campo (a diferencia de
+  S3/FTP). Solo confirma que se puede crear `mediaDir` en disco (permisos
+  del filesystem) y activa la conexión, igual que los demás proveedores
+  (desactiva cualquier otra conexión activa del usuario).
+- Frontend: en `/connect.html`, la card de "Carpeta local (media/ del
+  proyecto)" no abre ningún formulario — el botón **Usar carpeta local**
+  llama directo a `POST /api/connections/local` y refresca el estado.
+
+### Cómo probarlo
+
+1. `cd backend && npm run dev`
+2. Logueado, andá a `http://localhost:3000/connect.html`
+3. Click en **Usar carpeta local** — la card pasa a "Activo" al instante
+   (no hay credenciales que completar)
+4. Andá a `http://localhost:3000/home.html` — el navegador de archivos
+   arranca vacío apuntando a tu carpeta (`backend/../media/user-<tu-id>/`)
+5. Probá **Nueva carpeta** y subir una imagen: deberían aparecer de
+   inmediato en el explorador y en disco, en `media/user-<tu-id>/`
+
+A diferencia de los otros cuatro proveedores, esto corre enteramente en el
+mismo filesystem del sandbox, así que pude probarlo de punta a punta yo
+mismo (sin las limitaciones de red que sí afectaron a Dropbox/Drive/FTP):
+crear carpetas anidadas, subir un archivo y confirmar que el chequeo de
+integridad de `routes/files.js` compara bien el tamaño, listar y borrar, y
+que un `ref` con `..` se rechaza con 400 antes de tocar el disco.
+
+## Descargar archivos
+
+Cada archivo listado en el explorador (`home.html`) tiene un botón de
+descarga (⬇) al lado del tamaño.
+
+- `GET /api/files/download?ref=<ref>&name=<name>`: descarga el archivo tal
+  cual esta guardado, sin ningun procesamiento. `ref` es el mismo
+  identificador opaco que ya devuelve `GET /api/files` (path para
+  Dropbox/FTP/local, id para Drive, key para S3); `name` lo manda el
+  frontend (ya lo tiene del listado) y se usa solo para el nombre del
+  archivo descargado, no para ubicarlo.
+- Cada proveedor implementa `downloadFile(userId, ref) -> Buffer`, siguiendo
+  la misma convencion que `uploadFile` (buffer completo en memoria, sin
+  streaming) para mantener los cinco `services/*.js` con la misma forma.
+  Para FTP (que solo permite descargar hacia un stream de escritura, no
+  devuelve un buffer directo) se acumulan los chunks en memoria mientras la
+  conexion sigue abierta, y recien se devuelve el buffer completo. Para S3
+  se usa `response.Body.transformToByteArray()`, y para Drive
+  `alt: 'media'` con `responseType: 'arraybuffer'`.
+- La respuesta siempre se manda con `Content-Type: application/octet-stream`
+  y `Content-Disposition: attachment` (con `filename` + `filename*` RFC 5987
+  para que los nombres con acentos/espacios se guarden bien), asi que el
+  navegador siempre lo baja como archivo en vez de intentar mostrarlo
+  inline, sin importar el tipo real de la imagen.
+- Probado de punta a punta con el proveedor local: subida de un archivo
+  binario de prueba, descarga, y comparacion de checksum MD5 contra el
+  original (coinciden exactamente).
+
+## Fondos variados en el login
+
+Las pantallas de login y registro pueden mostrar una foto de fondo elegida
+al azar en cada carga, poniendo imagenes en `public/img/login-bg/` (ver el
+`README.md` de esa carpeta).
+
+- `GET /api/login-background` (ruta publica, sin `requireAuth` — se usa
+  antes de que exista sesion): lee `public/img/login-bg/`, filtra por
+  extension (`.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`) y devuelve
+  `{ url }` con una elegida al azar, o `{ url: null }` si la carpeta esta
+  vacia o no existe.
+- `public/js/authBg.js` (`initAuthBackground()`, usado por `login.html` y
+  `register.html`): pide esa URL y, si hay alguna, la setea como
+  `background-image` de un `div#login-bg` fijo a pantalla completa, con un
+  velo semitransparente (`rgba(245, 245, 247, 0.55)`) encima para que la
+  tarjeta de login seguir siendo legible sin importar la foto. Si no hay
+  ninguna imagen, no pasa nada y queda el fondo solido de siempre.
+- **Detalle de CSS a tener en cuenta**: `#login-bg` no lleva `z-index`
+  negativo a proposito. El fondo del `<body>` se "promueve" al canvas de la
+  pagina (por no tener `background` seteado en `<html>`), y ese canvas se
+  pinta por debajo de cualquier elemento con z-index negativo — un
+  `z-index: -1` ahi dejaria la foto siempre invisible aunque el
+  `background-image` este bien seteado. Alcanza con que el div quede
+  primero en el DOM (antes de `.page-center`) para pintarse detras sin
+  necesidad de z-index.
+- Probado con Playwright: pantalla en blanco (carpeta vacia) sin romper
+  nada, y con una imagen de prueba cargada se ve de fondo con el velo
+  encima y la tarjeta de login perfectamente legible.
+
+## Cuenta administradora
+
+Hay una cuenta con permisos extra para ver la lista de usuarios y
+administrar sus cuentas, con dos capacidades: ver la carpeta local de
+cualquier usuario (no solo la propia) y resetear la contraseña de
+cualquier cuenta.
+
+- **Como se designa el admin**: variable de entorno `ADMIN_EMAIL` en
+  `backend/.env`. Cualquier cuenta que se registre o inicie sesión con ese
+  email exacto queda marcada como admin automáticamente (columna
+  `users.is_admin`), sea una cuenta nueva o una que ya existía antes de
+  configurar la variable. Sin `ADMIN_EMAIL`, no hay ninguna cuenta admin y
+  `/admin.html` y `/api/admin/*` quedan inaccesibles para todos (403).
+  Se descartó "el primer usuario registrado se vuelve admin solo" porque no
+  sirve para elegir un admin específico en una instalación que ya tiene
+  usuarios (quedaría admin el más viejo por id, no necesariamente el que
+  se quiere).
+- `middleware/requireAdmin.js`: se monta después de `requireAuth` en
+  `routes/admin.js`, devuelve 403 si la cuenta autenticada no tiene
+  `is_admin`.
+- **La pantalla "Conectar almacenamiento" también es solo para el admin**:
+  un usuario regular ya tiene su carpeta local asignada sola al
+  registrarse (ver [Carpeta local del proyecto](#carpeta-local-del-proyecto-sin-credenciales))
+  y no necesita elegir ni cambiar de proveedor. En `routes/connections.js`,
+  `requireAdmin` se monta *después* de `GET /` (que sigue disponible para
+  cualquier usuario autenticado, porque el topbar y el explorador la usan
+  para saber cuál es la conexión activa — ya viene scopeada a
+  `req.session.userId`, no expone conexiones de otras cuentas) pero *antes*
+  de activar/borrar/crear conexiones y de los flujos OAuth. En el frontend,
+  `/connect.html` redirige a `/home.html` si el usuario logueado no es
+  admin, y el link "Conectar almacenamiento" del topbar (`js/nav.js`,
+  `applyAdminNavVisibility`) se oculta para cuentas no-admin, igual que
+  "Administrador".
+- `GET /api/admin/users`: lista todas las cuentas (email, `is_admin`,
+  fecha de alta). Nunca se manda `password_hash`.
+- `POST /api/admin/users/:id/reset-password`: genera una contraseña
+  temporal al azar (`crypto.randomBytes`, 12 caracteres en base64url), la
+  guarda ya hasheada, y la devuelve en texto plano **una sola vez** en la
+  respuesta — la app no manda emails, así que el admin se la tiene que
+  pasar al usuario por otro medio. En `admin.html` se muestra en un cartel
+  verde con instrucciones de copiarla en el momento.
+- **Acceso a la raíz del almacenamiento local (`media/`)**: `services/local.js`
+  ahora usa el email del usuario (saneado) como nombre de carpeta en vez
+  de `user-<id>`, para poder identificar de quién es cada carpeta con solo
+  mirar el filesystem. Para una cuenta admin, la raíz (`ref = ''`) deja de
+  ser su propia carpeta y pasa a ser `config.mediaDir` directamente — o sea
+  que al entrar al explorador con "Carpeta local" activa, el admin ve una
+  carpeta por cada usuario que la haya usado, y puede entrar a cualquiera
+  para listar, descargar, subir o borrar archivos ahí, con la misma
+  interfaz genérica de `routes/files.js` (no hizo falta ningún endpoint
+  nuevo para esto). Un usuario normal sigue completamente aislado en su
+  propia carpeta, sin poder salir de ahí (mismo chequeo de path traversal
+  de siempre).
+- **Migración de carpetas viejas**: las instalaciones que ya tenían
+  archivos guardados en `media/user-<id>/` (de antes de este cambio) se
+  migran solas: la primera vez que el usuario vuelve a usar la carpeta
+  local después de este deploy, si existe la carpeta vieja `user-<id>` y
+  todavía no existe la nueva con su email, se renombra automáticamente sin
+  perder nada.
+- Probado de punta a punta: cuenta regular + cuenta admin, el admin ve la
+  carpeta de la cuenta regular en la raíz y descarga un archivo suyo
+  (checksum MD5 idéntico), un usuario regular no puede escaparse de su
+  carpeta (400), `/api/admin/users` da 403 para una cuenta no-admin,
+  reseteo de contraseña seguido de login con la contraseña nueva
+  (funciona) y con la vieja (falla), y migración de una carpeta
+  `user-<id>` simulada a la carpeta nueva por email.
+
+## Miniaturas, vista ampliada y borrado
+
+En el explorador, cada imagen se muestra con una miniatura en vez del
+ícono genérico, y un click la abre en grande (lightbox). También se puede
+borrar archivos y (según el rol) carpetas y cuentas de usuario.
+
+- **Miniatura + lightbox**: reutiliza el mismo endpoint de descarga
+  (`GET /api/files/download`) agregando `inline=1`, en vez de crear una
+  ruta aparte. Con `inline=1`, si el nombre tiene una extensión de imagen
+  conocida (`routes/files.js`, mapa `IMAGE_MIME_TYPES`), la respuesta usa
+  el `Content-Type` real (`image/jpeg`, `image/png`, etc.) y
+  `Content-Disposition: inline` en vez de `attachment`, para que el
+  navegador la muestre en la página en lugar de forzar la descarga. Sin
+  `inline=1` (o para un archivo que no es imagen), el comportamiento es
+  exactamente el de antes. No hay ninguna librería de procesamiento de
+  imágenes de por medio — la miniatura es la imagen completa mostrada
+  chica por CSS (`object-fit: cover`, 40×40px) con `loading="lazy"` para no
+  pedir todas las imágenes de una carpeta de una sola vez, solo las que
+  entran en pantalla. El lightbox (`public/js/explorer.js`) es un overlay
+  simple hecho a mano (sin librería): se cierra clickeando el fondo, el
+  botón ✕, o con Escape.
+- **Borrar archivos**: `DELETE /api/files?ref=` (requiere sesión, sin
+  restricción de rol adicional — ver más abajo por qué alcanza con eso).
+  Botón 🗑 al lado de cada archivo, con confirmación (`window.confirm`)
+  antes de mandar el pedido.
+- **Borrar carpetas — solo admin**: `DELETE /api/files/folders?ref=`, con
+  `requireAdmin` además de `requireAuth`. Se agregó `deleteFolder(userId, ref)`
+  a los cinco `services/*.js`: en Dropbox y Google Drive es literalmente el
+  mismo `deleteFile`/`filesDeleteV2`/`files.delete` (esas APIs no
+  distinguen archivo de carpeta para borrar), en FTP es
+  `client.removeDir(ref)` (recursivo, de `basic-ftp`), en S3 hay que listar
+  todos los objetos con ese prefijo (sin `Delimiter`, a cualquier
+  profundidad) y borrarlos en lote con `DeleteObjectsCommand`, y en local
+  es `fs.rm(dir, { recursive: true, force: true })`. La ruta rechaza con
+  400 un intento de borrar la raíz (`ref` vacío) para no poder vaciar de un
+  clic toda una cuenta de nube o, en el caso del admin en local,
+  `config.mediaDir` entero. El botón 🗑 de una carpeta solo se renderiza en
+  el frontend si `user.is_admin`, pero el control real está en el backend.
+- **Por qué borrar archivos no necesita chequeo de rol aparte**: para
+  Dropbox/Drive/S3/FTP cada conexión es la cuenta de nube de un único
+  usuario — no hay forma de que un usuario le pase a la API un `ref` de
+  "la nube de otro", esa noción no existe para esos cuatro proveedores.
+  Para local, el aislamiento ya lo resuelve `resolveContext` /
+  `resolveWithinRoot` (ver [Cuenta administradora](#cuenta-administradora)):
+  la raíz de un usuario regular es su propia carpeta (no puede
+  construir un `ref` que apunte afuera, tira 400), y la del admin es
+  `config.mediaDir` completo. O sea que "admin puede borrar cualquier
+  imagen, un usuario regular solo las de su propia carpeta" ya sale gratis
+  de la misma resolución de rutas que se usa para listar/subir/descargar,
+  sin lógica nueva.
+- **Eliminar usuarios — solo admin**: `DELETE /api/admin/users/:id` en
+  `admin.html`, con confirmación. Borra la fila de `users` (`cloud_connections`
+  se borra sola por el `ON DELETE CASCADE` de la FK) y, mejor esfuerzo, la
+  carpeta local del usuario en disco (`local.deleteUserFolder(email)`) — si
+  falla esto último no se cancela el borrado de la cuenta. No se puede
+  eliminar la propia cuenta logueada (400 en el backend, y el botón
+  "Eliminar" directamente no aparece en esa fila en `admin.html`).
+- **Endurecido `requireAuth`**: ahora también confirma que el usuario de
+  `req.session.userId` siga existiendo (antes solo chequeaba que la sesión
+  tuviera un `userId` seteado). Sin esto, la sesión de una cuenta recién
+  eliminada seguía "autenticada" hasta que expirara sola, y podía terminar
+  en errores confusos más adentro en vez de un 401 limpio apenas se borra
+  la cuenta.
+- Probado de punta a punta: miniatura e inline (`Content-Type: image/jpeg`,
+  `Content-Disposition: inline`) vs. descarga normal (`octet-stream`,
+  `attachment`) para el mismo archivo; usuario regular borra su propio
+  archivo (204) pero no puede borrar ninguna carpeta (403); admin borra una
+  carpeta de otro usuario y no puede borrar la raíz (400); admin elimina
+  una cuenta (204), confirma que su carpeta desaparece del disco, y que la
+  sesión vieja de esa cuenta ya no sirve (401); admin no puede eliminarse a
+  sí mismo (400, y sin botón en la UI). Con Playwright: miniatura visible
+  en la lista, click abre el lightbox con la imagen grande, botón ✕ la
+  cierra, y el diálogo de confirmación de borrado con su mensaje.
+
+## Mostrar/ocultar contraseña
+
+Los 4 campos de contraseña de la app (login, registro, y las credenciales
+de S3 y FTP en "Conectar almacenamiento") tienen un botón "ojito" para ver
+lo que se esta escribiendo.
+
+- `public/js/passwordToggle.js` (`initPasswordToggles()`): busca todos los
+  botones `.password-toggle` en la página y alterna el `type` del input
+  asociado (por `data-target`, el `id` del input) entre `password` y
+  `text`, cambiando el emoji (👁 / 🙈) y el `aria-label` acorde.
+  Reutilizable: cada campo solo necesita envolverse en un
+  `<div class="password-field">` con el input y el botón adentro, sin
+  lógica nueva por campo.
+
+## Descarga zipeada (admin)
+
+El admin puede seleccionar varios archivos y/o carpetas del explorador y
+bajarlos todos juntos en un `.zip`, o bajar el contenido completo de una
+carpeta con un solo click — sin tener que descargar imagen por imagen.
+
+- **Selección múltiple**: con la cuenta admin aparece un checkbox al lado
+  de cada archivo/carpeta y un checkbox "Seleccionar todo" en la barra de
+  herramientas. Al marcar algo aparece el botón "Descargar seleccion (N)".
+  La selección es solo de la carpeta actual (se vacía sola al navegar a
+  otra) — mezclar selecciones de carpetas distintas en un mismo zip no
+  valía la complejidad extra.
+- **Carpeta entera de un click**: cada carpeta tiene un botón 📦 aparte del
+  de borrar, que arma un zip con todo su contenido (subcarpetas incluidas)
+  sin necesidad de seleccionar nada primero.
+- `POST /api/files/download-zip` (`requireAdmin`, body `{ items: [{ref,
+  name, type}, ...] }`): arma el zip en el servidor con
+  [`archiver`](https://www.npmjs.com/package/archiver) (única dependencia
+  nueva agregada para esto — Node no tiene una forma nativa de armar el
+  *formato* ZIP, a diferencia de gzip que sí trae `node:zlib`) y lo
+  transmite en streaming directo a la respuesta (`archive.pipe(res)`), sin
+  buffer­ear el zip completo en memoria del lado del servidor antes de
+  mandarlo. El frontend (`downloadZip` en `explorer.js`) hace un `fetch`
+  con el body y guarda el `blob` de la respuesta como descarga.
+- **No hizo falta ningún método nuevo por proveedor**: arma el zip
+  recorriendo recursivamente las carpetas con `listFolder` +
+  `downloadFile`, que los cinco `services/*.js` ya implementan — mismo
+  criterio de reuso que en
+  [Descargar archivos](#descargar-archivos). Un item de tipo `folder`
+  dispara una recorrida recursiva (`addFolderToArchive`) que reconstruye
+  la estructura de subcarpetas dentro del zip; un item de tipo `file` se
+  agrega directo.
+  Un archivo que falla a mitad de camino (borrado mientras tanto, error de
+  red) se salta y loguea en el servidor en vez de arruinar el zip entero.
+- Admin-only, mismo criterio que borrar carpetas/cuentas: la ruta tiene
+  `requireAdmin` ademas de `requireAuth`, y los checkboxes + botones 📦 /
+  "Descargar seleccion" solo se renderizan en el frontend si
+  `user.is_admin`.
+- Probado de punta a punta: zip con selección mixta (2 archivos sueltos +
+  1 carpeta con subcarpeta) conserva la estructura de carpetas adentro del
+  zip y el contenido coincide byte a byte con el original (checksum MD5);
+  zip de una sola carpeta con un click; 403 para una cuenta no-admin; 400
+  si no se selecciona nada; y con Playwright, el flujo completo en
+  navegador (seleccionar todo → click en "Descargar seleccion" → evento de
+  descarga real del navegador).
+
 ## Estado del proyecto
 
-Con esto quedan cuatro proveedores andando: Dropbox, Google Drive y FTP
+Con esto quedan cinco proveedores andando: Dropbox, Google Drive y FTP
 probados de punta a punta por vos contra cuentas/servidores reales; S3 con
-el scaffold completo listo para cuando tengas un bucket para probar. El
-flujo end-to-end completo — registro, conectar almacenamiento,
-navegar/crear carpetas, subir imágenes sin compresión con chequeo de
-integridad — funciona igual sin importar cuál de los cuatro esté activo,
-gracias al despacho genérico en `routes/files.js` y a que los cuatro
-`services/*.js` implementan la misma interfaz.
+el scaffold completo listo para cuando tengas un bucket para probar; y la
+carpeta local del proyecto, probada de punta a punta sin depender de
+ninguna cuenta externa. El flujo end-to-end completo — registro, conectar
+almacenamiento, navegar/crear carpetas, subir imágenes sin compresión con
+chequeo de integridad — funciona igual sin importar cuál de los cinco esté
+activo, gracias al despacho genérico en `routes/files.js` y a que los
+cinco `services/*.js` implementan la misma interfaz.
 
 Además, la configuración para desplegar en Render.com ya está lista (ver
 [DEPLOY.md](./DEPLOY.md)).
