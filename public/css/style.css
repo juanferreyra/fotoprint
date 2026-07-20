@@ -64,12 +64,6 @@ body {
   text-decoration: none;
 }
 
-.auth-brand img {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-}
-
 .brand-word {
   font-weight: 700;
   color: var(--text);
@@ -241,12 +235,6 @@ button.primary:disabled {
   gap: 9px;
   text-decoration: none;
   flex-shrink: 0;
-}
-
-.topbar .brand img {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
 }
 
 .nav-links {
@@ -722,31 +710,6 @@ a.btn-primary-sm {
   color: var(--accent-hover);
 }
 
-.terms-accept-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: var(--text);
-  margin-bottom: 14px;
-  cursor: pointer;
-}
-
-.terms-accept-label input {
-  margin: 3px 0 0;
-  width: auto;
-  flex-shrink: 0;
-}
-
-.terms-accept-label a {
-  color: var(--accent);
-}
-
-.upload-zone.is-locked {
-  opacity: 0.55;
-  pointer-events: none;
-}
-
 /* --- Terminos y condiciones --- */
 
 .terms-content {
@@ -797,12 +760,6 @@ a.btn-primary-sm {
   gap: 8px;
   text-decoration: none;
   margin-bottom: 8px;
-}
-
-.footer-col .brand img {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
 }
 
 .footer-col h4 {
