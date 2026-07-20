@@ -1,0 +1,5 @@
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="60" cy="60" r="55" fill="#ffffff" stroke="#e70505" stroke-width="5"/>
+  <text x="60" y="58" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" font-size="29" font-weight="800" letter-spacing="-0.5" fill="#e70505">Kodak</text>
+  <text x="60" y="88" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" font-size="29" font-weight="300" fill="#3d434b">Tienda</text>
+</svg>
