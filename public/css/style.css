@@ -784,6 +784,10 @@ a.btn-primary-sm {
 .footer-col .brand img {
   width: 22px;
   height: 22px;
+  /* El logo tiene fondo transparente; sobre el footer rojo necesita un
+     circulo blanco detras para que el rojo y el gris del logo se lean. */
+  background: #fff;
+  border-radius: 50%;
 }
 
 /* Sobre el fondo rojo el wordmark va todo en blanco. */
