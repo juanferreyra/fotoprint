@@ -23,10 +23,15 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
+  /* Columna a pantalla completa para que el footer quede a la vista al pie
+     incluso en paginas cortas como el login. */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-center {
-  min-height: 100vh;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -67,12 +72,11 @@ body {
 .auth-brand img {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
 }
 
 .brand-word {
-  font-weight: 700;
-  color: var(--text);
+  font-weight: 800;
+  color: #e70505;
   letter-spacing: -0.02em;
 }
 
@@ -81,7 +85,8 @@ body {
 }
 
 .brand-word .accent {
-  color: var(--accent);
+  color: var(--text);
+  font-weight: 300;
 }
 
 .card {
@@ -246,7 +251,6 @@ button.primary:disabled {
 .topbar .brand img {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
 }
 
 .nav-links {
@@ -722,31 +726,6 @@ a.btn-primary-sm {
   color: var(--accent-hover);
 }
 
-.terms-accept-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: var(--text);
-  margin-bottom: 14px;
-  cursor: pointer;
-}
-
-.terms-accept-label input {
-  margin: 3px 0 0;
-  width: auto;
-  flex-shrink: 0;
-}
-
-.terms-accept-label a {
-  color: var(--accent);
-}
-
-.upload-zone.is-locked {
-  opacity: 0.55;
-  pointer-events: none;
-}
-
 /* --- Terminos y condiciones --- */
 
 .terms-content {
@@ -778,9 +757,12 @@ a.btn-primary-sm {
 
 .site-footer {
   margin-top: 48px;
-  border-top: 1px solid var(--border);
-  background: var(--card-bg);
+  background: #e70505;
+  color: #fff;
   padding: 32px 24px 20px;
+  /* Por encima del fondo fijo del login (.login-bg), que es un elemento
+     posicionado y sino pintaria su velo claro sobre el footer. */
+  position: relative;
 }
 
 .footer-inner {
@@ -802,7 +784,16 @@ a.btn-primary-sm {
 .footer-col .brand img {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  /* El logo tiene fondo transparente; sobre el footer rojo necesita un
+     circulo blanco detras para que el rojo y el gris del logo se lean. */
+  background: #fff;
+  border-radius: 50%;
+}
+
+/* Sobre el fondo rojo el wordmark va todo en blanco. */
+.site-footer .brand-word,
+.site-footer .brand-word .accent {
+  color: #fff;
 }
 
 .footer-col h4 {
@@ -810,11 +801,11 @@ a.btn-primary-sm {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .footer-col p {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 0.85rem;
   margin: 0;
   line-height: 1.5;
@@ -824,14 +815,14 @@ a.btn-primary-sm {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--text);
+  color: #fff;
   text-decoration: none;
   font-size: 0.88rem;
   margin-bottom: 9px;
 }
 
 .footer-link:hover {
-  color: var(--accent);
+  text-decoration: underline;
 }
 
 .footer-address {
@@ -842,18 +833,18 @@ a.btn-primary-sm {
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: rgba(255, 255, 255, 0.12);
   padding: 12px 14px;
   text-decoration: none;
-  color: var(--text);
+  color: #fff;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .footer-map-card:hover {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .footer-map-icon {
@@ -865,11 +856,11 @@ a.btn-primary-sm {
   display: flex;
   flex-direction: column;
   font-size: 0.85rem;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .footer-map-text strong {
-  color: var(--text);
+  color: #fff;
   font-size: 0.9rem;
 }
 
@@ -877,8 +868,8 @@ a.btn-primary-sm {
   max-width: 960px;
   margin: 24px auto 0;
   padding-top: 16px;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 0.78rem;
   text-align: center;
 }
