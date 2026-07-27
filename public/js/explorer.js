@@ -44,6 +44,7 @@ const els = {
   selectAllLabel: document.getElementById('select-all-label'),
   selectAllCheckbox: document.getElementById('select-all-checkbox'),
   downloadSelectedBtn: document.getElementById('download-selected-btn'),
+  uploadNotice: document.getElementById('upload-notice'),
   instructionsBtn: document.getElementById('instructions-btn'),
   instructionsForm: document.getElementById('instructions-form'),
   instructionsNombre: document.getElementById('instructions-nombre'),
@@ -601,9 +602,13 @@ async function init() {
     return;
   }
   isAdmin = Boolean(user.is_admin);
-  // Las instrucciones de impresion las deja el cliente para el vendedor
-  // (admin), asi que el boton solo se muestra a los usuarios comunes.
-  if (isAdmin) els.instructionsBtn.style.display = 'none';
+  // Tanto el boton de instrucciones como el aviso "Importante" sobre las
+  // imagenes subidas son mensajes dirigidos al cliente; el admin no los
+  // necesita, asi que se ocultan para la cuenta admin.
+  if (isAdmin) {
+    els.instructionsBtn.style.display = 'none';
+    els.uploadNotice.style.display = 'none';
+  }
   initTopbar(user.is_admin);
   initFooterYear();
   await loadConnectionStatus();
