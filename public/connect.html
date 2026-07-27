@@ -76,6 +76,32 @@
       margin: 0;
       width: auto;
     }
+
+    /* En celulares la tarjeta de proveedor apila el nombre sobre los botones
+       de accion (que pasan a ancho completo) en vez de apretarse en una fila. */
+    @media (max-width: 640px) {
+      .provider-card {
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .provider-actions {
+        width: 100%;
+      }
+
+      .provider-actions button,
+      .provider-actions a {
+        flex: 1 1 auto;
+      }
+
+      .credentials-form {
+        padding: 16px 18px;
+      }
+
+      .credentials-form-actions button {
+        flex: 1 1 auto;
+      }
+    }
   </style>
 </head>
 <body>

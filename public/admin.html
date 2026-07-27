@@ -56,6 +56,27 @@
       border-radius: 4px;
       font-size: 0.95rem;
     }
+
+    /* En celulares la fila de usuario apila el email a ancho completo y
+       reparte los botones de accion, en vez de exprimir el email a nada. */
+    @media (max-width: 640px) {
+      .user-row {
+        flex-wrap: wrap;
+      }
+
+      .user-email {
+        flex: 1 1 100%;
+      }
+
+      .user-created {
+        order: 2;
+      }
+
+      .user-row .btn-secondary,
+      .user-row .btn-danger {
+        flex: 1 1 auto;
+      }
+    }
   </style>
 </head>
 <body>

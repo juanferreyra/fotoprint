@@ -323,6 +323,12 @@ button.link-button:hover {
 }
 
 main.container {
+  /* width:100% + min-width:0 son necesarios porque el <body> es un
+     contenedor flex en columna: sin ellos, un item con contenido ancho
+     (nombres de archivo largos, emails) resuelve su ancho a max-content y
+     desborda la pantalla en el celular en vez de encogerse. */
+  width: 100%;
+  min-width: 0;
   max-width: 720px;
   margin: 40px auto;
   padding: 0 24px;
@@ -752,6 +758,10 @@ main.container h2 {
 .btn-secondary {
   background: var(--bg);
   color: var(--text);
+  /* Borde para que el boton se distinga tambien sobre fondos del mismo tono
+     que --bg (si no, se lee como texto plano, p. ej. a ancho completo en el
+     celular). */
+  border: 1px solid var(--border);
   padding: 8px 14px;
 }
 
@@ -960,4 +970,130 @@ a.btn-primary-sm {
   color: rgba(255, 255, 255, 0.85);
   font-size: 0.78rem;
   text-align: center;
+}
+
+/* --- Responsive / celulares --- */
+
+/* Red de seguridad global: ninguna imagen debe forzar scroll horizontal.
+   Las reglas por clase (miniaturas, logos) tienen mayor especificidad, asi
+   que conservan su tamano fijo; solo se ven afectadas las imagenes sueltas. */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Strings sin espacios (emails, nombres de archivo largos) se parten en vez
+   de estirar el layout mas alla del ancho de la pantalla. */
+.breadcrumb button,
+.footer-link,
+.footer-map-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    padding: 10px 14px;
+    gap: 8px 12px;
+  }
+
+  .topbar-right {
+    gap: 6px 10px;
+  }
+
+  /* El email puede ser largo y no tiene espacios donde cortar: se recorta
+     con puntos suspensivos para que no empuje el boton de cerrar sesion. */
+  .topbar .user-email {
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nav-links a {
+    padding: 6px 9px;
+    font-size: 0.85rem;
+  }
+
+  main.container {
+    margin: 24px auto;
+    padding: 0 16px;
+  }
+
+  /* Las acciones del explorador pasan a una fila propia a ancho completo,
+     con los botones repartiendose el espacio en vez de desbordar. */
+  .explorer-toolbar-actions {
+    width: 100%;
+  }
+
+  .explorer-toolbar-actions .btn-primary-sm,
+  .explorer-toolbar-actions .btn-secondary {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  /* La barra de nueva carpeta apila el input a ancho completo sobre los
+     botones (antes el input fijo de 220px podia desbordar). */
+  .new-folder-form {
+    flex-wrap: wrap;
+  }
+
+  .new-folder-form input {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .new-folder-form button {
+    flex: 1 1 auto;
+  }
+
+  .instructions-form {
+    padding: 14px;
+  }
+
+  .instructions-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .instructions-form-actions .btn-primary-sm,
+  .instructions-form-actions .btn-secondary {
+    flex: 1 1 auto;
+  }
+
+  .instructions-feedback {
+    flex-basis: 100%;
+  }
+
+  /* Filas del explorador: menos gap/padding para que entren miniatura,
+     nombre y botones de accion sin apretarse en pantallas chicas. */
+  .entry-row {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  /* El item de subida apila nombre / barra / estado en vez de forzar una
+     sola fila mas ancha que la pantalla. */
+  .upload-item {
+    flex-wrap: wrap;
+  }
+
+  .upload-item-name {
+    flex: 1 1 100%;
+  }
+
+  .site-footer {
+    padding: 26px 16px 18px;
+  }
+
+  .footer-inner {
+    gap: 22px;
+  }
+}
+
+/* Pantallas muy angostas: el email del topbar suele ser lo que mas empuja,
+   se esconde (la cuenta ya se ve en Administrador / Conectar). */
+@media (max-width: 380px) {
+  .topbar .user-email {
+    display: none;
+  }
 }
