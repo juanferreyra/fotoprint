@@ -407,7 +407,7 @@ function openInstructionsForm() {
   els.instructionsForm.style.display = 'flex';
   els.instructionsBtn.style.display = 'none';
   setInstructionsFeedback('', false);
-  els.instructionsCharcount.textContent = `${els.instructionsMensaje.value.length} / 100`;
+  els.instructionsCharcount.textContent = `${els.instructionsMensaje.value.length} / 300`;
   els.instructionsNombre.focus();
 }
 
@@ -420,7 +420,7 @@ els.instructionsBtn.addEventListener('click', openInstructionsForm);
 els.instructionsCancel.addEventListener('click', closeInstructionsForm);
 
 els.instructionsMensaje.addEventListener('input', () => {
-  els.instructionsCharcount.textContent = `${els.instructionsMensaje.value.length} / 100`;
+  els.instructionsCharcount.textContent = `${els.instructionsMensaje.value.length} / 300`;
 });
 
 els.instructionsForm.addEventListener('submit', async (event) => {
@@ -443,7 +443,7 @@ els.instructionsForm.addEventListener('submit', async (event) => {
       body: JSON.stringify(payload),
     });
     els.instructionsForm.reset();
-    els.instructionsCharcount.textContent = '0 / 100';
+    els.instructionsCharcount.textContent = '0 / 300';
     setInstructionsFeedback('¡Listo! Tus instrucciones se guardaron.', false);
     // Recarga la carpeta para que aparezca (o se actualice) el instrucciones.txt.
     await loadFolder(currentRef);
@@ -601,6 +601,9 @@ async function init() {
     return;
   }
   isAdmin = Boolean(user.is_admin);
+  // Las instrucciones de impresion las deja el cliente para el vendedor
+  // (admin), asi que el boton solo se muestra a los usuarios comunes.
+  if (isAdmin) els.instructionsBtn.style.display = 'none';
   initTopbar(user.is_admin);
   initFooterYear();
   await loadConnectionStatus();

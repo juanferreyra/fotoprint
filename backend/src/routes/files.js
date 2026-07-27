@@ -273,7 +273,7 @@ filesRouter.post('/folders', async (req, res) => {
 // comun, su propia carpeta raiz), y se le van agregando bloques con fecha:
 // nunca se pisa lo anterior, para no perder instrucciones previas.
 const INSTRUCTIONS_FILE = 'instrucciones.txt';
-const MAX_INSTRUCTIONS_MESSAGE = 100;
+const MAX_INSTRUCTIONS_MESSAGE = 300;
 
 function requiredText(value, label, maxLength) {
   if (typeof value !== 'string') throw badRequest(`El campo "${label}" es requerido.`);
