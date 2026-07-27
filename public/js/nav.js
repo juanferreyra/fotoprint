@@ -15,9 +15,17 @@ export function highlightActiveNavLink() {
   });
 }
 
-export async function renderProviderBadge() {
+// La insignia indica en que almacenamiento estan guardados los archivos.
+// Eso es informacion de configuracion que solo le importa al admin; un
+// usuario regular no necesita (ni deberia) ver a donde esta conectado el
+// almacenamiento, asi que para clientes se oculta directamente.
+export async function renderProviderBadge(isAdmin) {
   const badge = document.getElementById('provider-badge');
   if (!badge) return;
+  if (!isAdmin) {
+    badge.style.display = 'none';
+    return;
+  }
   try {
     const { connections } = await apiFetch('/api/connections');
     const active = connections.find((c) => c.is_active);
@@ -46,6 +54,6 @@ export function applyAdminNavVisibility(isAdmin) {
 
 export function initTopbar(isAdmin) {
   highlightActiveNavLink();
-  renderProviderBadge();
+  renderProviderBadge(isAdmin);
   applyAdminNavVisibility(isAdmin);
 }
