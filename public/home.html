@@ -41,6 +41,7 @@
             Seleccionar todo
           </label>
           <button class="btn-secondary" id="download-selected-btn" type="button" style="display:none">Descargar seleccion</button>
+          <button class="btn-secondary" id="instructions-btn" type="button">Instrucciones de impresion</button>
           <button class="btn-primary-sm" id="new-folder-btn" type="button">Nueva carpeta</button>
         </div>
       </div>
@@ -49,6 +50,37 @@
         <input type="text" id="new-folder-name" placeholder="Nombre de la carpeta" maxlength="255" required />
         <button type="submit" class="btn-primary-sm">Crear</button>
         <button type="button" class="btn-secondary" id="new-folder-cancel">Cancelar</button>
+      </form>
+
+      <form class="instructions-form" id="instructions-form" style="display:none">
+        <p class="instructions-form-intro">
+          Dejale instrucciones al vendedor sobre tu pedido (cantidad de copias, medidas, etc.).
+          Poné tu nombre y un teléfono de contacto para que puedan llamarte ante cualquier eventualidad.
+        </p>
+        <div class="instructions-form-grid">
+          <label>
+            Nombre y apellido
+            <input type="text" id="instructions-nombre" maxlength="120" required />
+          </label>
+          <label>
+            Teléfono o forma de contacto
+            <input type="text" id="instructions-contacto" maxlength="120" placeholder="Ej: WhatsApp +54 9 11 ..." required />
+          </label>
+          <label>
+            N° de pedido (Tienda Nube, si tenés)
+            <input type="text" id="instructions-pedido" maxlength="60" placeholder="Opcional" />
+          </label>
+        </div>
+        <label class="instructions-form-message">
+          Instrucciones para el vendedor
+          <textarea id="instructions-mensaje" maxlength="100" rows="2" placeholder="Ej: 2 copias de cada foto en 10x15" required></textarea>
+          <span class="instructions-charcount" id="instructions-charcount">0 / 100</span>
+        </label>
+        <div class="instructions-form-actions">
+          <button type="submit" class="btn-primary-sm">Guardar instrucciones</button>
+          <button type="button" class="btn-secondary" id="instructions-cancel">Cancelar</button>
+          <span class="instructions-feedback" id="instructions-feedback"></span>
+        </div>
       </form>
 
       <div id="error-box" class="error-box"></div>

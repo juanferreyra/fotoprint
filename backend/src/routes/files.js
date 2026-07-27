@@ -268,6 +268,82 @@ filesRouter.post('/folders', async (req, res) => {
   }
 });
 
+// Nombre del archivo donde se acumulan las instrucciones de impresion que
+// deja el cliente. Va dentro de la carpeta que esta mirando (para un usuario
+// comun, su propia carpeta raiz), y se le van agregando bloques con fecha:
+// nunca se pisa lo anterior, para no perder instrucciones previas.
+const INSTRUCTIONS_FILE = 'instrucciones.txt';
+const MAX_INSTRUCTIONS_MESSAGE = 100;
+
+function requiredText(value, label, maxLength) {
+  if (typeof value !== 'string') throw badRequest(`El campo "${label}" es requerido.`);
+  const trimmed = value.trim();
+  if (!trimmed) throw badRequest(`El campo "${label}" es requerido.`);
+  if (trimmed.length > maxLength) throw badRequest(`El campo "${label}" es demasiado largo.`);
+  return trimmed;
+}
+
+function optionalText(value, maxLength) {
+  if (value === undefined || value === null) return '';
+  const trimmed = String(value).trim();
+  if (trimmed.length > maxLength) throw badRequest('Uno de los campos es demasiado largo.');
+  return trimmed;
+}
+
+// Fecha/hora en la zona horaria de la tienda (Buenos Aires), asi el vendedor
+// lee cuando se cargo cada instruccion sin depender de la zona del servidor.
+function formatTimestamp() {
+  return new Date().toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+// Guarda las instrucciones de impresion que deja el cliente. Se agregan al
+// final del .txt de la carpeta (leyendo lo que ya habia y reescribiendolo)
+// para conservar cualquier instruccion previa que no se haya borrado.
+filesRouter.post('/instructions', async (req, res) => {
+  try {
+    const service = getProviderService(req.session.userId);
+    const parent = normalizeRef(req.body?.parent);
+
+    const nombre = requiredText(req.body?.nombre, 'nombre', 120);
+    const contacto = requiredText(req.body?.contacto, 'contacto', 120);
+    const pedido = optionalText(req.body?.pedido, 60);
+    const mensaje = requiredText(req.body?.mensaje, 'instrucciones', MAX_INSTRUCTIONS_MESSAGE);
+
+    const lines = [
+      `[${formatTimestamp()}]`,
+      `Nombre: ${nombre}`,
+      `Contacto: ${contacto}`,
+    ];
+    if (pedido) lines.push(`Pedido: ${pedido}`);
+    lines.push(`Instrucciones: ${mensaje}`);
+    const block = lines.join('\n');
+
+    // Lee el contenido actual (si el archivo ya existe en la carpeta) para
+    // agregarle el bloque nuevo al final en vez de pisarlo.
+    let existing = '';
+    const entries = await service.listFolder(req.session.userId, parent);
+    const current = entries.find((e) => e.type === 'file' && e.name === INSTRUCTIONS_FILE);
+    if (current) {
+      const buffer = await service.downloadFile(req.session.userId, current.ref);
+      existing = buffer.toString('utf8').replace(/\s+$/, '');
+    }
+
+    const content = existing ? `${existing}\n\n${block}\n` : `${block}\n`;
+    await service.uploadFile(req.session.userId, parent, INSTRUCTIONS_FILE, Buffer.from(content, 'utf8'));
+
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    handleError(err, res);
+  }
+});
+
 filesRouter.post('/upload', async (req, res) => {
   try {
     await uploadSingleFile(req, res);

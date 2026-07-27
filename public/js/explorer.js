@@ -9,7 +9,7 @@ const ROOT_LABELS = {
   google_drive: 'Mi Drive',
   s3: 'Bucket S3',
   ftp: 'Servidor FTP',
-  local: 'Carpeta local',
+  local: 'Inicio',
 };
 
 // "ref" es opaco por proveedor (path para Dropbox, id de archivo para
@@ -44,6 +44,15 @@ const els = {
   selectAllLabel: document.getElementById('select-all-label'),
   selectAllCheckbox: document.getElementById('select-all-checkbox'),
   downloadSelectedBtn: document.getElementById('download-selected-btn'),
+  instructionsBtn: document.getElementById('instructions-btn'),
+  instructionsForm: document.getElementById('instructions-form'),
+  instructionsNombre: document.getElementById('instructions-nombre'),
+  instructionsContacto: document.getElementById('instructions-contacto'),
+  instructionsPedido: document.getElementById('instructions-pedido'),
+  instructionsMensaje: document.getElementById('instructions-mensaje'),
+  instructionsCharcount: document.getElementById('instructions-charcount'),
+  instructionsCancel: document.getElementById('instructions-cancel'),
+  instructionsFeedback: document.getElementById('instructions-feedback'),
 };
 
 function showError(message) {
@@ -380,6 +389,69 @@ els.newFolderForm.addEventListener('submit', async (event) => {
     await loadFolder(currentRef);
   } catch (err) {
     showError(err.message);
+  }
+});
+
+// --- Instrucciones de impresion ---
+// El cliente deja un mensaje corto para el vendedor (que quiere impreso, mas
+// nombre y telefono de contacto). Se guarda en un .txt dentro de la carpeta
+// que esta mirando, agregandose al final sin borrar instrucciones previas.
+
+function setInstructionsFeedback(message, isError) {
+  els.instructionsFeedback.textContent = message;
+  els.instructionsFeedback.classList.toggle('is-error', Boolean(isError));
+  els.instructionsFeedback.classList.toggle('is-success', Boolean(message) && !isError);
+}
+
+function openInstructionsForm() {
+  els.instructionsForm.style.display = 'flex';
+  els.instructionsBtn.style.display = 'none';
+  setInstructionsFeedback('', false);
+  els.instructionsCharcount.textContent = `${els.instructionsMensaje.value.length} / 100`;
+  els.instructionsNombre.focus();
+}
+
+function closeInstructionsForm() {
+  els.instructionsForm.style.display = 'none';
+  els.instructionsBtn.style.display = '';
+}
+
+els.instructionsBtn.addEventListener('click', openInstructionsForm);
+els.instructionsCancel.addEventListener('click', closeInstructionsForm);
+
+els.instructionsMensaje.addEventListener('input', () => {
+  els.instructionsCharcount.textContent = `${els.instructionsMensaje.value.length} / 100`;
+});
+
+els.instructionsForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  setInstructionsFeedback('', false);
+
+  const payload = {
+    parent: currentRef,
+    nombre: els.instructionsNombre.value.trim(),
+    contacto: els.instructionsContacto.value.trim(),
+    pedido: els.instructionsPedido.value.trim(),
+    mensaje: els.instructionsMensaje.value.trim(),
+  };
+
+  const submitBtn = els.instructionsForm.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  try {
+    await apiFetch('/api/files/instructions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    els.instructionsForm.reset();
+    els.instructionsCharcount.textContent = '0 / 100';
+    setInstructionsFeedback('¡Listo! Tus instrucciones se guardaron.', false);
+    // Recarga la carpeta para que aparezca (o se actualice) el instrucciones.txt.
+    await loadFolder(currentRef);
+    setTimeout(closeInstructionsForm, 1800);
+  } catch (err) {
+    setInstructionsFeedback(err.message, true);
+  } finally {
+    submitBtn.disabled = false;
   }
 });
 
