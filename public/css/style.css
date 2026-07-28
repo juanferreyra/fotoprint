@@ -761,6 +761,101 @@ main.container h2 {
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* --- Dialogo "Instrucciones de uso" --- */
+.usage-dialog {
+  width: min(560px, 92vw);
+  max-height: 85vh;
+  border: none;
+  border-radius: var(--radius);
+  padding: 0;
+  background: var(--card-bg);
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.usage-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.usage-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.usage-dialog-head h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.usage-dialog-close {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.usage-dialog-close:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.usage-list {
+  margin: 0;
+  padding: 16px 20px 6px;
+  list-style: none;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
+.usage-list li {
+  position: relative;
+  padding: 0 0 14px 24px;
+  line-height: 1.5;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.usage-list li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.usage-list strong {
+  font-weight: 600;
+}
+
+/* Los ejemplos (ej. "10x15") van resaltados como un chip suave. */
+.usage-list em {
+  font-style: normal;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.usage-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+}
+
 .empty-state {
   padding: 32px 16px;
   text-align: center;

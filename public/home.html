@@ -41,7 +41,8 @@
             Seleccionar todo
           </label>
           <button class="btn-secondary" id="download-selected-btn" type="button" style="display:none">Descargar seleccion</button>
-          <button class="btn-secondary" id="instructions-btn" type="button">Instrucciones de impresion</button>
+          <button class="btn-secondary" id="usage-btn" type="button">Instrucciones de uso</button>
+          <button class="btn-secondary" id="instructions-btn" type="button">Mensaje al vendedor</button>
           <button class="btn-primary-sm" id="new-folder-btn" type="button">Nueva carpeta</button>
         </div>
       </div>
@@ -105,6 +106,25 @@
     <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Cerrar">✕</button>
     <img id="lightbox-img" src="" alt="" />
   </div>
+
+  <dialog class="usage-dialog" id="usage-dialog">
+    <div class="usage-dialog-head">
+      <h3>Instrucciones de uso</h3>
+      <button type="button" class="usage-dialog-close" id="usage-close" aria-label="Cerrar">✕</button>
+    </div>
+    <ul class="usage-list">
+      <li>¿Querés subir fotos sueltas? Elegilas desde donde dice <strong>«elegí un archivo»</strong>.</li>
+      <li>¿Querés organizarlas en carpetas? Tocá <strong>«Nueva carpeta»</strong>, ponele el nombre que quieras (por ejemplo <em>10x15</em> o el número de pedido de la Tienda) y tocá <strong>«Crear»</strong>. Podés crear todas las carpetas que necesites.</li>
+      <li>Para cargar fotos dentro de una carpeta, hacé clic en ella y después subilas desde <strong>«elegí un archivo»</strong>.</li>
+      <li>Para volver al inicio y ver todas tus carpetas, tocá el botón <strong>«Inicio»</strong>.</li>
+      <li>Una vez que las fotos suben a la plataforma, ya las podemos ver.</li>
+      <li>Si compraste las fotos por la tienda, no necesitás hacer nada más.</li>
+      <li>Si las encargaste por mail o WhatsApp, avisanos para poder procesarlas.</li>
+    </ul>
+    <div class="usage-dialog-actions">
+      <button type="button" class="btn-primary-sm" id="usage-ok">Entendido</button>
+    </div>
+  </dialog>
 
   <footer class="site-footer">
     <div class="footer-inner">

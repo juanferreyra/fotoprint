@@ -45,6 +45,10 @@ const els = {
   selectAllCheckbox: document.getElementById('select-all-checkbox'),
   downloadSelectedBtn: document.getElementById('download-selected-btn'),
   uploadNotice: document.getElementById('upload-notice'),
+  usageBtn: document.getElementById('usage-btn'),
+  usageDialog: document.getElementById('usage-dialog'),
+  usageClose: document.getElementById('usage-close'),
+  usageOk: document.getElementById('usage-ok'),
   instructionsBtn: document.getElementById('instructions-btn'),
   instructionsForm: document.getElementById('instructions-form'),
   instructionsNombre: document.getElementById('instructions-nombre'),
@@ -393,6 +397,21 @@ els.newFolderForm.addEventListener('submit', async (event) => {
   }
 });
 
+// --- Instrucciones de uso ---
+// Ayuda estatica para el cliente (como subir fotos, armar carpetas, etc.).
+// Se muestra en un dialogo modal; no toca el backend.
+function closeUsageDialog() {
+  if (els.usageDialog.open) els.usageDialog.close();
+}
+
+els.usageBtn.addEventListener('click', () => els.usageDialog.showModal());
+els.usageClose.addEventListener('click', closeUsageDialog);
+els.usageOk.addEventListener('click', closeUsageDialog);
+// Click en el fondo (fuera del contenido) tambien cierra el dialogo.
+els.usageDialog.addEventListener('click', (event) => {
+  if (event.target === els.usageDialog) closeUsageDialog();
+});
+
 // --- Instrucciones de impresion ---
 // El cliente deja un mensaje corto para el vendedor (que quiere impreso, mas
 // nombre y telefono de contacto). Se guarda en un .txt dentro de la carpeta
@@ -602,11 +621,12 @@ async function init() {
     return;
   }
   isAdmin = Boolean(user.is_admin);
-  // Tanto el boton de instrucciones como el aviso "Importante" sobre las
-  // imagenes subidas son mensajes dirigidos al cliente; el admin no los
-  // necesita, asi que se ocultan para la cuenta admin.
+  // El mensaje al vendedor, las instrucciones de uso y el aviso "Importante"
+  // sobre las imagenes subidas son mensajes dirigidos al cliente; el admin no
+  // los necesita, asi que se ocultan para la cuenta admin.
   if (isAdmin) {
     els.instructionsBtn.style.display = 'none';
+    els.usageBtn.style.display = 'none';
     els.uploadNotice.style.display = 'none';
   }
   initTopbar(user.is_admin);
