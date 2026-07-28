@@ -428,6 +428,29 @@ main.container h2 {
   cursor: default;
 }
 
+/* El primer segmento del breadcrumb es "Inicio": se muestra como un boton
+   claro (chip con borde) para que se note que es la accion de volver al
+   inicio, en vez de leerse como texto plano. */
+.breadcrumb button:first-child {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 5px 12px;
+  font-weight: 600;
+}
+
+/* En la raiz, "Inicio" queda deshabilitado (es la ubicacion actual) pero
+   sigue viendose como boton. */
+.breadcrumb button:first-child:disabled {
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+.breadcrumb button:first-child:not(:disabled):hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 .breadcrumb .sep {
   color: var(--muted);
 }

@@ -40,11 +40,15 @@ export async function renderProviderBadge(isAdmin) {
   }
 }
 
-// "Conectar almacenamiento" y "Administrador" son solo para la cuenta
-// admin: un usuario regular ya tiene su carpeta local asignada sola al
-// registrarse y no necesita (ni puede) tocar la configuracion de
-// almacenamiento.
+// "Explorador", "Conectar almacenamiento" y "Administrador" en la barra de
+// navegacion son solo para la cuenta admin, que es la unica que alterna
+// entre varias secciones. Un usuario regular solo tiene el explorador (su
+// carpeta), asi que el link "Explorador" le queda de mas: se le ocultan
+// todos y su barra de navegacion queda vacia.
 export function applyAdminNavVisibility(isAdmin) {
+  const explorerLink = document.getElementById('explorer-nav-link');
+  if (explorerLink) explorerLink.style.display = isAdmin ? '' : 'none';
+
   const adminLink = document.getElementById('admin-nav-link');
   if (adminLink) adminLink.style.display = isAdmin ? '' : 'none';
 
