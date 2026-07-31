@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Google Maps">
+  <defs>
+    <linearGradient id="gm-grad" x1="0.1" y1="0.05" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#4285F4"/>
+      <stop offset="0.38" stop-color="#34A853"/>
+      <stop offset="0.68" stop-color="#FBBC05"/>
+      <stop offset="1" stop-color="#EA4335"/>
+    </linearGradient>
+  </defs>
+  <path d="M12 2.2c-4.3 0-7.8 3.4-7.8 7.7 0 5.2 7.8 11.9 7.8 11.9s7.8-6.7 7.8-11.9c0-4.3-3.5-7.7-7.8-7.7z" fill="url(#gm-grad)"/>
+  <circle cx="12" cy="9.9" r="2.9" fill="#fff"/>
+</svg>

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>KodakTienda - Conectar almacenamiento</title>
-  <link rel="icon" type="image/svg+xml" href="/img/logo.svg" />
+  <link rel="icon" type="image/svg+xml" href="/img/brand-logo.svg" />
   <link rel="stylesheet" href="/css/style.css" />
   <style>
     .provider-list {
@@ -76,6 +76,32 @@
       margin: 0;
       width: auto;
     }
+
+    /* En celulares la tarjeta de proveedor apila el nombre sobre los botones
+       de accion (que pasan a ancho completo) en vez de apretarse en una fila. */
+    @media (max-width: 640px) {
+      .provider-card {
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .provider-actions {
+        width: 100%;
+      }
+
+      .provider-actions button,
+      .provider-actions a {
+        flex: 1 1 auto;
+      }
+
+      .credentials-form {
+        padding: 16px 18px;
+      }
+
+      .credentials-form-actions button {
+        flex: 1 1 auto;
+      }
+    }
   </style>
 </head>
 <body>
@@ -85,7 +111,7 @@
       <span class="brand-word">Kodak<span class="accent">Tienda</span></span>
     </a>
     <nav class="nav-links">
-      <a href="/home.html">Explorador</a>
+      <a href="/home.html" id="explorer-nav-link" style="display:none">Explorador</a>
       <a href="/connect.html" id="connect-nav-link" style="display:none">Conectar almacenamiento</a>
       <a href="/admin.html" id="admin-nav-link" style="display:none">Administrador</a>
     </nav>
@@ -175,7 +201,7 @@
         <h4>Ubicacion</h4>
         <p class="footer-address">Av. Bartolome Mitre 596<br />Avellaneda, Buenos Aires, Argentina</p>
         <a class="footer-map-card" href="https://maps.app.goo.gl/uLCuBnVPekXCewGM9?g_st=aw" target="_blank" rel="noopener noreferrer">
-          <span class="footer-map-icon">📍</span>
+          <img class="footer-map-icon" src="/img/social/maps.svg" alt="" width="26" height="26" />
           <span class="footer-map-text">
             <strong>Visitanos</strong>
             Ver ubicacion en Google Maps
@@ -192,9 +218,18 @@
 
       <div class="footer-col">
         <h4>Enlaces</h4>
-        <a class="footer-link" href="https://kodaktienda.mitiendanube.com/?exit_preview_theme_installation" target="_blank" rel="noopener noreferrer">🛍️ Tienda online</a>
-        <a class="footer-link" href="https://www.instagram.com/kodaktienda" target="_blank" rel="noopener noreferrer">📷 Instagram</a>
-        <a class="footer-link" href="/terms.html">📄 Terminos y condiciones</a>
+        <a class="footer-card" href="https://kodaktienda.mitiendanube.com/?exit_preview_theme_installation" target="_blank" rel="noopener noreferrer">
+          <img class="footer-card-icon" src="/img/social/store.svg" alt="" width="24" height="24" />
+          <span>Tienda online</span>
+        </a>
+        <a class="footer-card" href="https://www.instagram.com/kodaktienda" target="_blank" rel="noopener noreferrer">
+          <img class="footer-card-icon" src="/img/social/instagram.svg" alt="" width="24" height="24" />
+          <span>Instagram</span>
+        </a>
+        <a class="footer-card" href="/terms.html">
+          <img class="footer-card-icon" src="/img/social/terms.svg" alt="" width="24" height="24" />
+          <span>Terminos y condiciones</span>
+        </a>
       </div>
     </div>
     <div class="footer-bottom">© <span class="footer-year"></span> KodakTienda. Todos los derechos reservados.</div>
