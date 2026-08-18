@@ -12,6 +12,9 @@ const findByIdStmt = db.prepare('SELECT * FROM users WHERE id = ?');
 const listAllStmt = db.prepare('SELECT * FROM users ORDER BY created_at');
 const setAdminStmt = db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?');
 const setPasswordHashStmt = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+const updateProfileStmt = db.prepare(
+  'UPDATE users SET nombre = @nombre, telefono = @telefono WHERE id = @id'
+);
 const deleteUserStmt = db.prepare('DELETE FROM users WHERE id = ?');
 
 export async function createUser(email, password) {
@@ -34,6 +37,14 @@ export function listAllUsers() {
 
 export function promoteToAdmin(userId) {
   setAdminStmt.run(userId);
+}
+
+// Guarda (pisa) el nombre y telefono de contacto del usuario. Se llama cuando
+// el cliente carga el formulario de mensaje al vendedor, para recordar esos
+// datos y precargarlos la proxima vez, y para que el admin pueda escribirle
+// por WhatsApp.
+export function updateUserProfile(userId, { nombre, telefono }) {
+  updateProfileStmt.run({ id: userId, nombre: nombre || null, telefono: telefono || null });
 }
 
 export async function verifyPassword(user, password) {
@@ -59,5 +70,12 @@ export function deleteUser(userId) {
 }
 
 export function toPublicUser(user) {
-  return { id: user.id, email: user.email, is_admin: Boolean(user.is_admin), created_at: user.created_at };
+  return {
+    id: user.id,
+    email: user.email,
+    is_admin: Boolean(user.is_admin),
+    nombre: user.nombre || '',
+    telefono: user.telefono || '',
+    created_at: user.created_at,
+  };
 }

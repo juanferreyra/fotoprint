@@ -12,6 +12,29 @@ adminRouter.get('/users', (req, res) => {
   res.json({ users: listAllUsers().map(toPublicUser) });
 });
 
+// Dado el nombre de la carpeta local de un cliente (que es su email saneado),
+// devuelve sus datos de contacto para que el admin pueda escribirle por
+// WhatsApp desde el explorador. Devuelve found=false si la carpeta no
+// corresponde a ninguna cuenta (por ejemplo una carpeta creada a mano).
+adminRouter.get('/client-contact', (req, res) => {
+  const folder = typeof req.query.folder === 'string' ? req.query.folder : '';
+  if (!folder) {
+    return res.status(400).json({ error: 'Falta el nombre de la carpeta.' });
+  }
+
+  const match = listAllUsers().find((u) => local.sanitizeFolderName(u.email) === folder);
+  if (!match) {
+    return res.json({ found: false });
+  }
+
+  res.json({
+    found: true,
+    email: match.email,
+    nombre: match.nombre || '',
+    telefono: match.telefono || '',
+  });
+});
+
 adminRouter.post('/users/:id/reset-password', async (req, res) => {
   const userId = Number(req.params.id);
   const user = findUserById(userId);
