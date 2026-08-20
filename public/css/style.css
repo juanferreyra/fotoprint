@@ -1059,6 +1059,14 @@ a.btn-primary-sm {
   text-decoration: underline;
 }
 
+/* Icono al inicio de un enlace de contacto (p. ej. el de WhatsApp), alineado
+   con el texto por el flex/gap de .footer-link. */
+.footer-link-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
 .footer-address {
   margin-bottom: 10px;
 }
