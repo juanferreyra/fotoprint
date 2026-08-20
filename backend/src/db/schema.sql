@@ -3,6 +3,11 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   is_admin INTEGER NOT NULL DEFAULT 0,
+  -- Datos de perfil que el cliente carga desde el formulario "Mensaje al
+  -- vendedor". Se guardan la primera vez que los ingresa y se reutilizan para
+  -- precargar ese formulario y para el boton de WhatsApp del admin.
+  nombre TEXT,
+  telefono TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

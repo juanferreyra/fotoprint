@@ -45,3 +45,15 @@ function migrateAddIsAdminColumn() {
 }
 
 migrateAddIsAdminColumn();
+
+// Migracion para bases creadas antes de agregar las columnas de perfil
+// (nombre / telefono) que el cliente carga desde el formulario de mensaje al
+// vendedor.
+function migrateAddProfileColumns() {
+  const columns = db.prepare('PRAGMA table_info(users)').all();
+  const names = new Set(columns.map((col) => col.name));
+  if (!names.has('nombre')) db.exec('ALTER TABLE users ADD COLUMN nombre TEXT');
+  if (!names.has('telefono')) db.exec('ALTER TABLE users ADD COLUMN telefono TEXT');
+}
+
+migrateAddProfileColumns();

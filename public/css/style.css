@@ -912,6 +912,24 @@ a.btn-primary-sm {
   display: inline-block;
 }
 
+/* Boton de WhatsApp al cliente (solo admin, dentro de la carpeta de un
+   cliente). Verde WhatsApp para que se distinga del resto de acciones. */
+.btn-wsp {
+  display: inline-block;
+  text-decoration: none;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  background: #25d366;
+  color: #fff;
+  transition: background 0.15s;
+}
+
+.btn-wsp:hover {
+  background: #1eb457;
+}
+
 .success-box {
   background: #e6f4ea;
   color: var(--success);
@@ -1039,6 +1057,14 @@ a.btn-primary-sm {
 
 .footer-link:hover {
   text-decoration: underline;
+}
+
+/* Icono al inicio de un enlace de contacto (p. ej. el de WhatsApp), alineado
+   con el texto por el flex/gap de .footer-link. */
+.footer-link-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .footer-address {
@@ -1169,7 +1195,8 @@ img {
   }
 
   .explorer-toolbar-actions .btn-primary-sm,
-  .explorer-toolbar-actions .btn-secondary {
+  .explorer-toolbar-actions .btn-secondary,
+  .explorer-toolbar-actions .btn-wsp {
     flex: 1 1 auto;
     text-align: center;
   }

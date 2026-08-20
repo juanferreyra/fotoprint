@@ -4,6 +4,7 @@ import { ZipArchive } from 'archiver';
 import { requireAuth } from '../middleware/auth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { getActiveConnection } from '../services/connections.js';
+import { updateUserProfile } from '../services/users.js';
 import * as dropboxService from '../services/dropbox.js';
 import * as googleDriveService from '../services/googleDrive.js';
 import * as s3Service from '../services/s3.js';
@@ -337,6 +338,10 @@ filesRouter.post('/instructions', async (req, res) => {
 
     const content = existing ? `${existing}\n\n${block}\n` : `${block}\n`;
     await service.uploadFile(req.session.userId, parent, INSTRUCTIONS_FILE, Buffer.from(content, 'utf8'));
+
+    // Recordamos el nombre y el contacto (telefono) en el perfil del usuario
+    // para precargarlos la proxima vez y para el boton de WhatsApp del admin.
+    updateUserProfile(req.session.userId, { nombre, telefono: contacto });
 
     res.status(201).json({ ok: true });
   } catch (err) {

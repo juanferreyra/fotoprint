@@ -19,6 +19,9 @@ const ROOT_LABELS = {
 let breadcrumbStack = [{ ref: '', name: 'Raiz' }];
 let currentRef = '';
 let isAdmin = false;
+// Perfil del usuario logueado (nombre / telefono que cargo en "Mensaje al
+// vendedor"). Se usa para precargar ese formulario la proxima vez.
+let userProfile = { nombre: '', telefono: '' };
 // ref -> { ref, name, type }. Se vacia cada vez que se cambia de carpeta
 // (seleccionar cosas de carpetas distintas para un mismo zip no vale la
 // pena la complejidad extra que agregaria).
@@ -58,6 +61,7 @@ const els = {
   instructionsCharcount: document.getElementById('instructions-charcount'),
   instructionsCancel: document.getElementById('instructions-cancel'),
   instructionsFeedback: document.getElementById('instructions-feedback'),
+  clientWspBtn: document.getElementById('client-wsp-btn'),
 };
 
 function showError(message) {
@@ -338,6 +342,40 @@ async function deleteEntry(entry) {
   }
 }
 
+// Muestra (o esconde) el boton de WhatsApp al cliente. Solo para el admin y
+// solo cuando esta dentro de la carpeta de un cliente: el primer segmento del
+// ref es el nombre de la carpeta de primer nivel (el email saneado del
+// cliente), que el backend usa para resolver su telefono. Abre wa.me con los
+// digitos del telefono para escribirle desde WhatsApp Web/app.
+async function updateClientWspButton() {
+  if (!els.clientWspBtn) return;
+
+  const hide = () => {
+    els.clientWspBtn.style.display = 'none';
+  };
+
+  const folder = currentRef.split('/').filter(Boolean)[0] || '';
+  if (!isAdmin || !folder) {
+    hide();
+    return;
+  }
+
+  try {
+    const contact = await apiFetch(`/api/admin/client-contact?folder=${encodeURIComponent(folder)}`);
+    const digits = contact.found ? String(contact.telefono || '').replace(/\D/g, '') : '';
+    if (!digits) {
+      hide();
+      return;
+    }
+    els.clientWspBtn.href = `https://wa.me/${digits}`;
+    els.clientWspBtn.title = `Escribir por WhatsApp a ${contact.nombre || contact.email}`;
+    els.clientWspBtn.style.display = '';
+  } catch {
+    // Si no se pudo resolver el contacto, simplemente no mostramos el boton.
+    hide();
+  }
+}
+
 // stack es opcional: si no se pasa, se recarga currentRef sin tocar el
 // breadcrumb (util despues de crear una carpeta o subir un archivo).
 async function loadFolder(ref, stack) {
@@ -349,6 +387,7 @@ async function loadFolder(ref, stack) {
     if (stack) breadcrumbStack = stack;
     renderBreadcrumb(breadcrumbStack);
     renderEntries(entries);
+    updateClientWspButton();
 
     const url = new URL(window.location.href);
     const leaf = breadcrumbStack[breadcrumbStack.length - 1];
@@ -427,6 +466,14 @@ function openInstructionsForm() {
   els.instructionsForm.style.display = 'flex';
   els.instructionsBtn.style.display = 'none';
   setInstructionsFeedback('', false);
+  // Precarga nombre y telefono recordados del perfil (si el campo esta vacio),
+  // asi el cliente no los tiene que reescribir cada vez.
+  if (!els.instructionsNombre.value && userProfile.nombre) {
+    els.instructionsNombre.value = userProfile.nombre;
+  }
+  if (!els.instructionsContacto.value && userProfile.telefono) {
+    els.instructionsContacto.value = userProfile.telefono;
+  }
   els.instructionsCharcount.textContent = `${els.instructionsMensaje.value.length} / 300`;
   els.instructionsNombre.focus();
 }
@@ -462,6 +509,9 @@ els.instructionsForm.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    // Recordamos localmente lo cargado para precargarlo la proxima vez (el
+    // backend ya lo guardo en el perfil del usuario).
+    userProfile = { nombre: payload.nombre, telefono: payload.contacto };
     els.instructionsForm.reset();
     els.instructionsCharcount.textContent = '0 / 300';
     setInstructionsFeedback('¡Listo! Tus instrucciones se guardaron.', false);
@@ -621,6 +671,7 @@ async function init() {
     return;
   }
   isAdmin = Boolean(user.is_admin);
+  userProfile = { nombre: user.nombre || '', telefono: user.telefono || '' };
   // El mensaje al vendedor, las instrucciones de uso y el aviso "Importante"
   // sobre las imagenes subidas son mensajes dirigidos al cliente; el admin no
   // los necesita, asi que se ocultan para la cuenta admin.

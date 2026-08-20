@@ -11,7 +11,7 @@ export const ACCOUNT_LABEL = 'Carpeta del proyecto (media/)';
 // usuario tiene su propia subcarpeta con el nombre de su email (saneado)
 // para que sea facil identificar de quien es cada carpeta mirando el
 // filesystem, y para que el admin (ver mas abajo) pueda reconocerlas.
-function sanitizeFolderName(email) {
+export function sanitizeFolderName(email) {
   return email.replace(/[^a-zA-Z0-9._@-]/g, '_');
 }
 
