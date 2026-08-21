@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { createUser, findUserByEmail, verifyPassword, toPublicUser, findUserById, promoteToAdmin } from '../services/users.js';
+import { createUser, findUserByEmail, verifyPassword, toPublicUser, findUserById, promoteToAdmin, updateUserProfile } from '../services/users.js';
 import { saveConnection } from '../services/connections.js';
+import { requireAuth } from '../middleware/auth.js';
 import * as local from '../services/local.js';
 import { config } from '../config.js';
 
@@ -78,6 +79,37 @@ authRouter.post('/logout', (req, res) => {
     res.clearCookie('kodaktienda.sid');
     res.status(204).end();
   });
+});
+
+// Guarda los datos de perfil obligatorios del cliente: nombre y apellido y
+// su WhatsApp. Son requeridos para poder contactarlo por su pedido, asi que
+// se le piden de forma prioritaria apenas entra si todavia no los cargo. El
+// WhatsApp se guarda como "telefono" (mismo campo que usa el boton de
+// WhatsApp del admin).
+authRouter.post('/profile', requireAuth, (req, res) => {
+  const nombre = typeof req.body?.nombre === 'string' ? req.body.nombre.trim() : '';
+  const telefono = typeof req.body?.telefono === 'string' ? req.body.telefono.trim() : '';
+
+  if (!nombre) {
+    return res.status(400).json({ error: 'El nombre y apellido es requerido.' });
+  }
+  if (nombre.length > 120) {
+    return res.status(400).json({ error: 'El nombre y apellido es demasiado largo.' });
+  }
+  if (!telefono) {
+    return res.status(400).json({ error: 'El WhatsApp es requerido.' });
+  }
+  if (telefono.length > 40) {
+    return res.status(400).json({ error: 'El WhatsApp es demasiado largo.' });
+  }
+  // Pedimos al menos algunos digitos para que sirva para escribir por WhatsApp.
+  if (telefono.replace(/\D/g, '').length < 8) {
+    return res.status(400).json({ error: 'Ingresa un numero de WhatsApp valido (con codigo de area).' });
+  }
+
+  updateUserProfile(req.session.userId, { nombre, telefono });
+  const user = findUserById(req.session.userId);
+  res.json({ user: toPublicUser(user) });
 });
 
 authRouter.get('/me', (req, res) => {

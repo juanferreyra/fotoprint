@@ -555,6 +555,79 @@ main.container h2 {
   color: var(--error);
 }
 
+/* Datos obligatorios del cliente (nombre + WhatsApp). Mismo look que el
+   formulario de instrucciones, pero con un borde de acento para remarcar que
+   es un paso obligatorio y prioritario. */
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px;
+  margin: 4px 0 16px;
+}
+
+.profile-form-intro {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.profile-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.profile-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.profile-form input {
+  margin: 0;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 100%;
+}
+
+.profile-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.profile-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-feedback {
+  font-size: 0.83rem;
+}
+
+.profile-feedback.is-success {
+  color: var(--success);
+}
+
+.profile-feedback.is-error {
+  color: var(--error);
+}
+
 .upload-zone {
   border: 2px dashed var(--border);
   border-radius: var(--radius);
@@ -722,6 +795,29 @@ main.container h2 {
 
 .entry-delete:hover {
   background: #fdecea;
+}
+
+/* Icono de WhatsApp por carpeta de cliente (solo admin). Mismo tamano que
+   los demas iconos de accion de la fila; el color verde lo pone el SVG. */
+.entry-wsp {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.entry-wsp:hover {
+  background: var(--accent-soft);
+}
+
+.entry-wsp img {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .lightbox {

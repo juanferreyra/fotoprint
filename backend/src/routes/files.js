@@ -4,7 +4,7 @@ import { ZipArchive } from 'archiver';
 import { requireAuth } from '../middleware/auth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { getActiveConnection } from '../services/connections.js';
-import { updateUserProfile } from '../services/users.js';
+import { findUserById } from '../services/users.js';
 import * as dropboxService from '../services/dropbox.js';
 import * as googleDriveService from '../services/googleDrive.js';
 import * as s3Service from '../services/s3.js';
@@ -307,20 +307,30 @@ function formatTimestamp() {
 // Guarda las instrucciones de impresion que deja el cliente. Se agregan al
 // final del .txt de la carpeta (leyendo lo que ya habia y reescribiendolo)
 // para conservar cualquier instruccion previa que no se haya borrado.
+//
+// El nombre y el WhatsApp del cliente ya no vienen en este formulario: son
+// datos de perfil obligatorios que se cargan aparte (POST /api/auth/profile),
+// asi que aca solo se pide el numero de pedido y el mensaje. Los datos de
+// contacto se toman del perfil del usuario para dejarlos en el .txt.
 filesRouter.post('/instructions', async (req, res) => {
   try {
     const service = getProviderService(req.session.userId);
     const parent = normalizeRef(req.body?.parent);
 
-    const nombre = requiredText(req.body?.nombre, 'nombre', 120);
-    const contacto = requiredText(req.body?.contacto, 'contacto', 120);
+    const user = findUserById(req.session.userId);
+    const nombre = (user?.nombre || '').trim();
+    const contacto = (user?.telefono || '').trim();
+    if (!nombre || !contacto) {
+      throw badRequest('Primero completa tus datos de nombre y WhatsApp.');
+    }
+
     const pedido = optionalText(req.body?.pedido, 60);
     const mensaje = requiredText(req.body?.mensaje, 'instrucciones', MAX_INSTRUCTIONS_MESSAGE);
 
     const lines = [
       `[${formatTimestamp()}]`,
       `Nombre: ${nombre}`,
-      `Contacto: ${contacto}`,
+      `WhatsApp: ${contacto}`,
     ];
     if (pedido) lines.push(`Pedido: ${pedido}`);
     lines.push(`Instrucciones: ${mensaje}`);
@@ -338,10 +348,6 @@ filesRouter.post('/instructions', async (req, res) => {
 
     const content = existing ? `${existing}\n\n${block}\n` : `${block}\n`;
     await service.uploadFile(req.session.userId, parent, INSTRUCTIONS_FILE, Buffer.from(content, 'utf8'));
-
-    // Recordamos el nombre y el contacto (telefono) en el perfil del usuario
-    // para precargarlos la proxima vez y para el boton de WhatsApp del admin.
-    updateUserProfile(req.session.userId, { nombre, telefono: contacto });
 
     res.status(201).json({ ok: true });
   } catch (err) {
