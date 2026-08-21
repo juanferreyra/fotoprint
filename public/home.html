@@ -54,20 +54,34 @@
         <button type="button" class="btn-secondary" id="new-folder-cancel">Cancelar</button>
       </form>
 
-      <form class="instructions-form" id="instructions-form" style="display:none">
-        <p class="instructions-form-intro">
-          Dejale instrucciones al vendedor sobre tu pedido (cantidad de copias, medidas, etc.).
-          Poné tu nombre y un teléfono de contacto para que puedan llamarte ante cualquier eventualidad.
+      <form class="profile-form" id="profile-form" style="display:none">
+        <p class="profile-form-intro">
+          <strong>Completá tus datos para continuar.</strong>
+          Necesitamos tu nombre y tu WhatsApp para poder contactarte por cualquier
+          cosa relacionada con tu pedido. Estos datos son obligatorios.
         </p>
-        <div class="instructions-form-grid">
+        <div class="profile-form-grid">
           <label>
             Nombre y apellido
-            <input type="text" id="instructions-nombre" maxlength="120" required />
+            <input type="text" id="profile-nombre" maxlength="120" required />
           </label>
           <label>
-            Teléfono o forma de contacto
-            <input type="text" id="instructions-contacto" maxlength="120" placeholder="Ej: WhatsApp +54 9 11 ..." required />
+            WhatsApp
+            <input type="text" id="profile-telefono" maxlength="40" placeholder="Ej: +54 9 11 2483-7281" required />
           </label>
+        </div>
+        <div class="profile-form-actions">
+          <button type="submit" class="btn-primary-sm">Guardar mis datos</button>
+          <span class="profile-feedback" id="profile-feedback"></span>
+        </div>
+      </form>
+
+      <form class="instructions-form" id="instructions-form" style="display:none">
+        <p class="instructions-form-intro">
+          Dejale instrucciones al vendedor sobre tu pedido (cantidad de copias, medidas, etc.)
+          y, si tenés, el número de pedido de la Tienda.
+        </p>
+        <div class="instructions-form-grid">
           <label>
             N° de pedido (Tienda Nube, si tenés)
             <input type="text" id="instructions-pedido" maxlength="60" placeholder="Opcional" />

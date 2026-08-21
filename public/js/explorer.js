@@ -52,10 +52,12 @@ const els = {
   usageDialog: document.getElementById('usage-dialog'),
   usageClose: document.getElementById('usage-close'),
   usageOk: document.getElementById('usage-ok'),
+  profileForm: document.getElementById('profile-form'),
+  profileNombre: document.getElementById('profile-nombre'),
+  profileTelefono: document.getElementById('profile-telefono'),
+  profileFeedback: document.getElementById('profile-feedback'),
   instructionsBtn: document.getElementById('instructions-btn'),
   instructionsForm: document.getElementById('instructions-form'),
-  instructionsNombre: document.getElementById('instructions-nombre'),
-  instructionsContacto: document.getElementById('instructions-contacto'),
   instructionsPedido: document.getElementById('instructions-pedido'),
   instructionsMensaje: document.getElementById('instructions-mensaje'),
   instructionsCharcount: document.getElementById('instructions-charcount'),
@@ -299,6 +301,39 @@ function renderEntries(entries) {
       // usuario regular puede borrar fotos de su propia carpeta, pero no
       // carpetas enteras).
       if (isAdmin) {
+        // En la raiz cada carpeta es la de un cliente (su email saneado). Si
+        // el cliente cargo su WhatsApp, mostramos un icono para escribirle,
+        // antes del icono de zipear y del de eliminar. Hace lo mismo que el
+        // boton "WhatsApp al cliente" de arriba (abre wa.me con su numero).
+        if (!currentRef) {
+          const wspLink = document.createElement('a');
+          wspLink.className = 'entry-wsp';
+          wspLink.target = '_blank';
+          wspLink.rel = 'noopener noreferrer';
+          wspLink.title = 'Escribir por WhatsApp al cliente';
+          wspLink.style.display = 'none';
+          wspLink.addEventListener('click', (event) => event.stopPropagation());
+          const wspIcon = document.createElement('img');
+          wspIcon.src = '/img/social/whatsapp.svg';
+          wspIcon.alt = 'WhatsApp';
+          wspIcon.width = 18;
+          wspIcon.height = 18;
+          wspLink.appendChild(wspIcon);
+          row.appendChild(wspLink);
+
+          apiFetch(`/api/admin/client-contact?folder=${encodeURIComponent(entry.name)}`)
+            .then((contact) => {
+              const digits = contact.found ? String(contact.telefono || '').replace(/\D/g, '') : '';
+              if (!digits) return;
+              wspLink.href = `https://wa.me/${digits}`;
+              wspLink.title = `Escribir por WhatsApp a ${contact.nombre || contact.email}`;
+              wspLink.style.display = '';
+            })
+            .catch(() => {
+              // Si no se pudo resolver el contacto, dejamos el icono oculto.
+            });
+        }
+
         const zipBtn = document.createElement('button');
         zipBtn.type = 'button';
         zipBtn.className = 'entry-download';
@@ -436,6 +471,74 @@ els.newFolderForm.addEventListener('submit', async (event) => {
   }
 });
 
+// --- Datos obligatorios del cliente (nombre + WhatsApp) ---
+// Son prioritarios: si el cliente todavia no los cargo, se le muestra este
+// formulario apenas entra para que los complete. El WhatsApp se guarda como
+// "telefono" y es lo que usa el admin para escribirle.
+
+function setProfileFeedback(message, isError) {
+  els.profileFeedback.textContent = message;
+  els.profileFeedback.classList.toggle('is-error', Boolean(isError));
+  els.profileFeedback.classList.toggle('is-success', Boolean(message) && !isError);
+}
+
+// Muestra el formulario de datos obligatorios y precarga lo que ya haya.
+// focus=true ademas pone el cursor en el primer campo vacio.
+function showProfileForm(focus) {
+  if (!els.profileForm) return;
+  els.profileForm.style.display = 'flex';
+  if (!els.profileNombre.value) els.profileNombre.value = userProfile.nombre || '';
+  if (!els.profileTelefono.value) els.profileTelefono.value = userProfile.telefono || '';
+  if (focus) {
+    const target = !userProfile.nombre ? els.profileNombre : els.profileTelefono;
+    target.focus();
+  }
+}
+
+// Decide si mostrar u ocultar el bloque de datos obligatorios. El admin no
+// carga estos datos, asi que nunca lo ve.
+function updateProfilePrompt() {
+  if (!els.profileForm) return;
+  if (!isAdmin && isProfileIncomplete()) {
+    showProfileForm(false);
+  } else {
+    els.profileForm.style.display = 'none';
+  }
+}
+
+if (els.profileForm) {
+  els.profileForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    setProfileFeedback('', false);
+
+    const nombre = els.profileNombre.value.trim();
+    const telefono = els.profileTelefono.value.trim();
+    if (!nombre || !telefono) {
+      setProfileFeedback('Completá tu nombre y tu WhatsApp.', true);
+      return;
+    }
+
+    const submitBtn = els.profileForm.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      const { user } = await apiFetch('/api/auth/profile', {
+        method: 'POST',
+        body: JSON.stringify({ nombre, telefono }),
+      });
+      userProfile = { nombre: user.nombre || '', telefono: user.telefono || '' };
+      setProfileFeedback('¡Listo! Guardamos tus datos.', false);
+      setTimeout(() => {
+        els.profileForm.style.display = 'none';
+        setProfileFeedback('', false);
+      }, 1200);
+    } catch (err) {
+      setProfileFeedback(err.message, true);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+}
+
 // --- Instrucciones de uso ---
 // Ayuda estatica para el cliente (como subir fotos, armar carpetas, etc.).
 // Se muestra en un dialogo modal; no toca el backend.
@@ -462,20 +565,24 @@ function setInstructionsFeedback(message, isError) {
   els.instructionsFeedback.classList.toggle('is-success', Boolean(message) && !isError);
 }
 
+// True si el cliente todavia no cargo sus datos obligatorios (nombre + WhatsApp).
+function isProfileIncomplete() {
+  return !userProfile.nombre || !userProfile.telefono;
+}
+
 function openInstructionsForm() {
+  // Los datos de contacto (nombre + WhatsApp) son obligatorios y van aparte.
+  // Si todavia no los cargo, lo mandamos primero a completar su perfil en vez
+  // de abrir el mensaje al vendedor.
+  if (isProfileIncomplete()) {
+    showProfileForm(true);
+    return;
+  }
   els.instructionsForm.style.display = 'flex';
   els.instructionsBtn.style.display = 'none';
   setInstructionsFeedback('', false);
-  // Precarga nombre y telefono recordados del perfil (si el campo esta vacio),
-  // asi el cliente no los tiene que reescribir cada vez.
-  if (!els.instructionsNombre.value && userProfile.nombre) {
-    els.instructionsNombre.value = userProfile.nombre;
-  }
-  if (!els.instructionsContacto.value && userProfile.telefono) {
-    els.instructionsContacto.value = userProfile.telefono;
-  }
   els.instructionsCharcount.textContent = `${els.instructionsMensaje.value.length} / 300`;
-  els.instructionsNombre.focus();
+  els.instructionsPedido.focus();
 }
 
 function closeInstructionsForm() {
@@ -496,8 +603,6 @@ els.instructionsForm.addEventListener('submit', async (event) => {
 
   const payload = {
     parent: currentRef,
-    nombre: els.instructionsNombre.value.trim(),
-    contacto: els.instructionsContacto.value.trim(),
     pedido: els.instructionsPedido.value.trim(),
     mensaje: els.instructionsMensaje.value.trim(),
   };
@@ -509,9 +614,6 @@ els.instructionsForm.addEventListener('submit', async (event) => {
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    // Recordamos localmente lo cargado para precargarlo la proxima vez (el
-    // backend ya lo guardo en el perfil del usuario).
-    userProfile = { nombre: payload.nombre, telefono: payload.contacto };
     els.instructionsForm.reset();
     els.instructionsCharcount.textContent = '0 / 300';
     setInstructionsFeedback('¡Listo! Tus instrucciones se guardaron.', false);
@@ -680,6 +782,9 @@ async function init() {
     els.usageBtn.style.display = 'none';
     els.uploadNotice.style.display = 'none';
   }
+  // Datos obligatorios: si el cliente todavia no cargo su nombre y WhatsApp,
+  // le mostramos el formulario de forma prioritaria apenas entra.
+  updateProfilePrompt();
   initTopbar(user.is_admin);
   initFooterYear();
   await loadConnectionStatus();

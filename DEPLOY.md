@@ -1,7 +1,76 @@
-# Desplegar KodakTienda en Render.com
+# Desplegar KodakTienda
 
 Este proyecto necesita un servidor Node.js corriendo todo el tiempo (no es un
-sitio estático ni PHP), así que hace falta un hosting que soporte eso.
+sitio estático ni PHP), así que hace falta un proceso que lo mantenga vivo.
+
+**En producción esta web se corre siempre con [PM2](https://pm2.keymetrics.io/)
+en el servidor propio** (ver más abajo). La sección de Render.com quedó como
+alternativa/histórica.
+
+---
+
+# Correr con PM2 (servidor propio) — método actual
+
+PM2 es un gestor de procesos para Node: mantiene la app levantada, la reinicia
+sola si se cae y sobrevive a los reinicios del servidor.
+
+## Arranque inicial (solo la primera vez)
+
+```bash
+# 1. Instalar PM2 global (una sola vez en el servidor)
+npm install -g pm2
+
+# 2. Instalar dependencias del backend
+cd /ruta/a/fotoprint/backend
+npm install
+
+# 3. Asegurate de tener el backend/.env con las variables de entorno
+#    (TOKEN_ENCRYPTION_KEY, SESSION_SECRET, BASE_URL, credenciales de
+#    Dropbox/Google, DATABASE_FILE, etc.)
+
+# 4. Arrancar la app bajo PM2 con un nombre claro
+pm2 start npm --name fotoprint -- start
+
+# 5. Guardar la lista de procesos y configurar el arranque automático al
+#    bootear el servidor (seguí la línea que imprime 'pm2 startup')
+pm2 save
+pm2 startup
+```
+
+## Reiniciar el servicio (lo de todos los días)
+
+```bash
+pm2 restart fotoprint        # reinicia el proceso (usá el nombre real, ver 'pm2 list')
+```
+
+## Otros comandos útiles
+
+```bash
+pm2 list                     # ver los procesos y sus nombres/ids
+pm2 logs fotoprint           # ver los logs en vivo
+pm2 stop fotoprint           # frenar sin borrar
+pm2 restart fotoprint --update-env   # reiniciar releyendo backend/.env si cambiaste variables
+pm2 delete fotoprint         # sacarlo de PM2 del todo
+```
+
+## Actualizar la app con código nuevo
+
+```bash
+cd /ruta/a/fotoprint
+git pull
+cd backend
+npm install                  # por si cambiaron dependencias
+pm2 restart fotoprint
+```
+
+> Si `pm2 list` no muestra `fotoprint`, es que todavía no lo diste de alta:
+> volvé al "Arranque inicial". El nombre del proceso es el que le pasaste en
+> `--name`; si no te acordás, `pm2 list` te lo muestra.
+
+---
+
+# Desplegar en Render.com (alternativa / histórico)
+
 [Render](https://render.com) tiene un plan free que alcanza para probar la
 app, y se conecta directo al repo de GitHub sin usar terminal.
 
